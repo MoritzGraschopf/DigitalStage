@@ -1,33 +1,42 @@
-import type {NextApiRequest, NextApiResponse} from "next";
+import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { prisma } from '../../lib/prisma'; //Pfad unbedingt noch anpassen!!!
+import { prisma } from '@/lib/prisma';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-    if(req.method !== 'POST'){
-        return res.status(405).json({message: 'Method Not Allowed'});
+export async function POST(req: NextRequest) {
+    const body = await req.json();
+    const { email, password } = body;
+
+    if (!email || !password) {
+        return NextResponse.json({ message: 'Email and password are required' }, { status: 400 });
     }
 
-    const {email, password} = req.body;
+    try {
+        const user = await prisma.user.findUnique({ where: { email } });
 
-    if(!email || !password){
-        return res.status(400).json({message: 'Email and password are required'});
-    }
-
-    try{
-        const user = await prisma.user.findUnique({where: {email}});
-
-        if(!user){
-            return res.status(401).json({message: 'User not found'});
-
-            //Funktioniert erst wenn DB aktiv
-            //const passwordMatch =  await bcrypt.compare(password, user.passwordHash);
-
-
+        if (!user) {
+            return NextResponse.json({ message: 'User not found' }, { status: 401 });
         }
-    }
-    catch (error){
-        console.error('Error occurred', error);
-        return res.status(500).json({message: 'Internal Server Error'});
+
+        const passwordMatch = await bcrypt.compare(password, user.passwordHash);
+        if (!passwordMatch) {
+            return NextResponse.json({ message: 'Password not match' }, { status: 401 });
+        }
+
+        const secret = process.env.JWT_SECRET;
+        if (!secret) {
+            return NextResponse.json({ message: 'JWT secret missing' }, { status: 500 });
+        }
+
+        const token = jwt.sign(
+            { userId: user.id, email: user.email },
+            secret,
+            { expiresIn: '1h' }
+        );
+
+        return NextResponse.json({ token }, { status: 200 });
+    } catch (error) {
+        console.error('Login error:', error);
+        return NextResponse.json({ message: 'Internal Server Error' }, { status: 500 });
     }
 }
