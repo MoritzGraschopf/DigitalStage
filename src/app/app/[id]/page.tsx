@@ -39,7 +39,7 @@ export default function Page() {
             <div className="h-14"></div>
             <div></div>
 
-            <div className="ml-2 mb-2 border rounded-[8px] relative">
+            <div className="ml-2 mb-2 border rounded-md relative">
 
 
                 <Button className="absolute bottom-2 left-2" onClick={() => setJoined(false)}>
@@ -47,7 +47,7 @@ export default function Page() {
                     Verlassen
                 </Button>
             </div>
-            <div className="mx-2 mb-2 border rounded-[8px]">
+            <div className="mx-2 mb-2 border rounded-md">
                 <ConferenceChat />
             </div>
         </div>
