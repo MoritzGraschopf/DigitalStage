@@ -9,6 +9,8 @@ import {Button} from "@/components/ui/button";
 import {z} from "zod"
 import {zodResolver} from "@hookform/resolvers/zod";
 import {Input} from "@/components/ui/input";
+import {ArrowLeft} from "lucide-react";
+import ConferenceChat from "@/components/ConferenceChat";
 
 const participantSchema = z.object({
     password: z.string().min(8, {
@@ -33,9 +35,24 @@ export default function Page() {
     }
 
     return joined ? (
-        <div>joined</div>
+        <div className="grid grid-cols-[3fr_1fr] grid-rows-[min-content_1fr] h-screen w-screen fixed top-0 left-0 z-[-1]">
+            <div className="h-14"></div>
+            <div></div>
+
+            <div className="ml-2 mb-2 border rounded-[8px] relative">
+
+
+                <Button className="absolute bottom-2 left-2" onClick={() => setJoined(false)}>
+                    <ArrowLeft/>
+                    Verlassen
+                </Button>
+            </div>
+            <div className="mx-2 mb-2 border rounded-[8px]">
+                <ConferenceChat />
+            </div>
+        </div>
     ) : (
-        <div className="flex justify-center items-center h-screen w-screen fixed top-0 left-0">
+        <div className="flex justify-center items-center h-screen w-screen fixed top-0 left-0 z-[-1]">
             <Tabs defaultValue="viewer">
                 <TabsList>
                     <TabsTrigger value="viewer">Zuschauer</TabsTrigger>
@@ -47,8 +64,8 @@ export default function Page() {
                             <CardTitle>Zuschauer</CardTitle>
                             <CardDescription>Als Zuschauer beitreten</CardDescription>
                         </CardHeader>
-                        <CardFooter className="flex-col">
-                            <Button className="w-full">
+                        <CardFooter>
+                            <Button className="w-full" onClick={() => setJoined(true)}>
                                 Beitreten
                             </Button>
                         </CardFooter>
@@ -61,7 +78,6 @@ export default function Page() {
                             <CardDescription>Als Teilnehmer mit Kamera und Mikrofon beitreten</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            {/*TODO: mir reichts das hier geht nicht mach ich nächstes mal*/}
                             <Form {...form}>
                                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                                     <FormField
@@ -71,7 +87,7 @@ export default function Page() {
                                             <FormItem>
                                                 <FormLabel>Passwort</FormLabel>
                                                 <FormControl>
-                                                    <Input type="password" {...field} />
+                                                    <Input type="text" {...field} autoComplete="off"/>
                                                 </FormControl>
                                                 <FormDescription>
                                                     Passwort, welches vom Host festgelegt worden ist.
@@ -80,14 +96,12 @@ export default function Page() {
                                             </FormItem>
                                         )}
                                     />
+                                    <Button className="w-full">
+                                        Beitreten
+                                    </Button>
                                 </form>
                             </Form>
                         </CardContent>
-                        <CardFooter className="flex-col">
-                            <Button className="w-full">
-                                Beitreten
-                            </Button>
-                        </CardFooter>
                     </Card>
                 </TabsContent>
             </Tabs>
