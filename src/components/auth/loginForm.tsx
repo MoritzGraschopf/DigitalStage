@@ -4,6 +4,7 @@ import {Button} from "@/components/ui/button";
 import {useForm} from "react-hook-form";
 import {z} from "zod";
 import {zodResolver} from "@hookform/resolvers/zod";
+import {useAuth} from "@/context/AuthContext";
 
 const loginSchema = z.object({
     email: z.email({
@@ -17,6 +18,8 @@ const loginSchema = z.object({
 })
 
 export default function LoginForm() {
+    const { login } = useAuth()
+
     const form = useForm<z.infer<typeof loginSchema>>({
         resolver: zodResolver(loginSchema),
         defaultValues: {
@@ -26,10 +29,21 @@ export default function LoginForm() {
     })
 
     // 2. Define a submit handler.
-    function onSubmit(values: z.infer<typeof loginSchema>) {
+    async function onSubmit(values: z.infer<typeof loginSchema>) {
         // Do something with the form values.
         // ✅ This will be type-safe and validated.
         console.log(values)
+
+        await login(values.email, values.password)
+            .catch(error => {
+                console.log(error)
+
+                if (error.message === "Login fehlgeschlagen") {
+                    form.setError("email", { message: "Ungültige E-Mail oder Passwort" });
+                } else {
+                    form.setError("email", { message: "Ein unbekannter Fehler ist aufgetreten" });
+                }
+            })
     }
 
     return (

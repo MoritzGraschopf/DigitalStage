@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/menubar";
 import React, { useEffect } from "react";
 
-export default function LayoutMenuBar() {
+export default function LayoutMenuBar({logout}: {logout: () => void}) {
     const handleReload = () => {
         console.log("Neu laden triggered!");
     };
@@ -64,7 +64,7 @@ export default function LayoutMenuBar() {
                     <MenubarItem>Profil</MenubarItem>
                     <MenubarItem>Einstellungen</MenubarItem>
                     <MenubarSeparator />
-                    <MenubarItem variant="destructive">Abmelden</MenubarItem>
+                    <MenubarItem variant="destructive" onSelect={logout}>Abmelden</MenubarItem>
                 </MenubarContent>
             </MenubarMenu>
         </Menubar>
