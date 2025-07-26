@@ -46,9 +46,6 @@ export default function LayoutMenuBar() {
     return (
         <Menubar className="m-2">
             <MenubarMenu>
-                <MenubarTrigger>Konferenz</MenubarTrigger>
-            </MenubarMenu>
-            <MenubarMenu>
                 <MenubarTrigger>Ansicht</MenubarTrigger>
                 <MenubarContent>
                     <MenubarItem onSelect={handleReload}>

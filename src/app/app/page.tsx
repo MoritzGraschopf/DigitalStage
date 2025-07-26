@@ -40,7 +40,7 @@ export default function Home() {
                     <CardContent>
                         <p>{item.description}</p>
                     </CardContent>
-                    <CardFooter className="flex-col gap-2">
+                    <CardFooter className="flex-col">
                         <Button className="w-full" asChild>
                             <Link href={"/app/" + item.key}>
                                 Beitreten
