@@ -7,8 +7,74 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum ConferenceStatus {
+  SCHEDULED
+  ACTIVE
+  ENDED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+enum Role {
+  HOST
+  PARTICIPANT
+  VIEWER
+}
+
 model User {
-  id           Int     @id @default(autoincrement())
-  email        String  @unique
+  id           Int                @id @default(autoincrement())
+  name         String
+  email        String             @unique
   passwordHash String
+  conferences  Conference[]       @relation("Owner")
+  chatMessages ChatMessage[]
+  participations UserConference[]
+}
+
+model Conference {
+  id                    Int                @id @default(autoincrement())
+  title                 String
+  description           String?
+  startDate             DateTime?
+  endDate               DateTime?
+  status                ConferenceStatus
+  link                  String             @unique
+  participationPassword String?
+  userId                Int
+  user                  User               @relation("Owner", fields: [userId], references: [id])
+  chatMessages          ChatMessage[]
+  invitations           Invitation[]
+  participants          UserConference[]
+}
+
+model ChatMessage {
+  id            Int        @id @default(autoincrement())
+  message       String
+  userId        Int
+  conferenceId  Int
+  user          User       @relation(fields: [userId], references: [id])
+  conference    Conference @relation(fields: [conferenceId], references: [id])
+}
+
+model Invitation {
+  id           Int               @id @default(autoincrement())
+  email        String
+  status       InvitationStatus
+  conferenceId Int
+  conference   Conference        @relation(fields: [conferenceId], references: [id])
+}
+
+model UserConference {
+  userId        Int
+  conferenceId  Int
+  role          Role
+
+  user          User       @relation(fields: [userId], references: [id])
+  conference    Conference @relation(fields: [conferenceId], references: [id])
+
+  @@id([userId, conferenceId])
 }
