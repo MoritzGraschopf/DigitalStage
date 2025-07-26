@@ -10,7 +10,7 @@ export default function AppLayout({
     return (
         <>
             <LayoutMenuBar />
-            <main>
+            <main className="h-full">
                 {children}
             </main>
         </>

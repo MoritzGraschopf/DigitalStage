@@ -1,19 +1,60 @@
 "use client"
 
+import {Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage} from "@/components/ui/form";
 import {useState} from "react";
+import {useForm} from "react-hook-form"
 import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs";
-import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
+import {Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle} from "@/components/ui/card";
 import {Button} from "@/components/ui/button";
+import {z} from "zod"
+import {zodResolver} from "@hookform/resolvers/zod";
+import {Input} from "@/components/ui/input";
+import {ArrowLeft} from "lucide-react";
+import ConferenceChat from "@/components/ConferenceChat";
+
+const participantSchema = z.object({
+    password: z.string().min(8, {
+        error: "Passwort muss mindestens 8 Zeichen lang sein"
+    })
+})
 
 export default function Page() {
     const [joined, setJoined] = useState(false)
 
+    const form = useForm<z.infer<typeof participantSchema>>({
+        resolver: zodResolver(participantSchema),
+        defaultValues: {
+            password: ""
+        }
+    })
+
+    function onSubmit(values: z.infer<typeof participantSchema>) {
+        // Do something with the form values.
+        // ✅ This will be type-safe and validated.
+        console.log(values)
+    }
+
     return joined ? (
-        <div>joined</div>
+        <div className="grid grid-cols-[3fr_1fr] grid-rows-[min-content_1fr] h-screen w-screen fixed top-0 left-0 z-[-1]">
+            <div className="h-14"></div>
+            <div></div>
+
+            <div className="ml-2 mb-2 border rounded-md relative">
+
+
+                <Button className="absolute bottom-2 left-2" onClick={() => setJoined(false)}>
+                    <ArrowLeft/>
+                    Verlassen
+                </Button>
+            </div>
+            <div className="mx-2 mb-2 border rounded-md">
+                <ConferenceChat />
+            </div>
+        </div>
     ) : (
-        <div className="h-full grid place-items-center">
-            <Tabs>
-                <TabsList defaultValue="viewer">
+        <div className="flex justify-center items-center h-screen w-screen fixed top-0 left-0 z-[-1]">
+            <Tabs defaultValue="viewer">
+                <TabsList>
                     <TabsTrigger value="viewer">Zuschauer</TabsTrigger>
                     <TabsTrigger value="participant">Teilnehmer</TabsTrigger>
                 </TabsList>
@@ -21,12 +62,45 @@ export default function Page() {
                     <Card>
                         <CardHeader>
                             <CardTitle>Zuschauer</CardTitle>
-                            <CardDescription>Als Zuschauer Beitreten</CardDescription>
+                            <CardDescription>Als Zuschauer beitreten</CardDescription>
                         </CardHeader>
-                        <CardContent>
-                            <Button className="w-full" asChild>
+                        <CardFooter>
+                            <Button className="w-full" onClick={() => setJoined(true)}>
                                 Beitreten
                             </Button>
+                        </CardFooter>
+                    </Card>
+                </TabsContent>
+                <TabsContent value="participant">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Teilnehmer</CardTitle>
+                            <CardDescription>Als Teilnehmer mit Kamera und Mikrofon beitreten</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <Form {...form}>
+                                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                                    <FormField
+                                        control={form.control}
+                                        name="password"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Passwort</FormLabel>
+                                                <FormControl>
+                                                    <Input type="text" {...field} autoComplete="off"/>
+                                                </FormControl>
+                                                <FormDescription>
+                                                    Passwort, welches vom Host festgelegt worden ist.
+                                                </FormDescription>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <Button className="w-full">
+                                        Beitreten
+                                    </Button>
+                                </form>
+                            </Form>
                         </CardContent>
                     </Card>
                 </TabsContent>
