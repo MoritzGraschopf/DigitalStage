@@ -11,6 +11,7 @@ services:
         environment:
             DATABASE_URL: postgres://digitalstage:digitalStage123@db:5432/digitalstage
         restart: unless-stopped
+        command: sh -c "npx prisma migrate deploy && npm start"
 
     db:
         image: postgres:16
