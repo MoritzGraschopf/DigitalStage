@@ -23,6 +23,7 @@ const messageSchema = z.object({
 export default function ConferenceChat({conference}: { conference: Conference }) {
     const {user, token} = useAuth()
     const [messages, setMessages] = useState<ChatMessageWithUser[]>([])
+    const [ws, setWs] = useState<WebSocket | null>(null);
 
     const fetchMessages = useCallback(async () => {
         const res = await fetch(`/api/chatMessage?conferenceId=${conference.id}`, {
@@ -39,6 +40,20 @@ export default function ConferenceChat({conference}: { conference: Conference })
     useEffect(() => {
         fetchMessages().then()
     }, [fetchMessages]);
+
+    useEffect(() => {
+        const socket = new WebSocket('ws://localhost:3001');
+
+        socket.onmessage = (event) => {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'chatMessage') {
+                setMessages((prev) => [...prev, msg]);
+            }
+        };
+
+        setWs(socket);
+        return () => socket.close();
+    }, []);
 
     const form = useForm<z.infer<typeof messageSchema>>({
         resolver: zodResolver(messageSchema),
@@ -58,6 +73,13 @@ export default function ConferenceChat({conference}: { conference: Conference })
                 message: values.message
             })
         })
+        if (!!ws) ws.send(JSON.stringify({
+            message: values.message,
+            userId: user?.id,
+            conferenceId: conference.id,
+            name: user?.name
+        }));
+
         await fetchMessages()
         form.reset()
     }
