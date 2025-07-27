@@ -111,6 +111,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             body: JSON.stringify({ email, name, password }),
         });
 
+        if (res.status === 409) {
+            throw new Error('User already exists. Please use a different email.');
+        }
+
+
         if (!res.ok) throw new Error('Registration failed');
 
         const data = await res.json();
