@@ -7,7 +7,7 @@ import {Form, FormControl, FormField, FormItem} from "@/components/ui/form";
 import {Button} from "@/components/ui/button";
 import {SendHorizonal} from "lucide-react";
 import {Input} from "@/components/ui/input";
-import {useEffect, useState} from "react";
+import {useCallback, useEffect, useState} from "react";
 import {cn} from "@/lib/utils";
 import {ChatMessage, Conference, User} from "@prisma/client";
 import {useAuth} from "@/context/AuthContext";
@@ -24,7 +24,7 @@ export default function ConferenceChat({conference}: { conference: Conference })
     const {user, token} = useAuth()
     const [messages, setMessages] = useState<ChatMessageWithUser[]>([])
 
-    const fetchMessages = async () => {
+    const fetchMessages = useCallback(async () => {
         const res = await fetch(`/api/chatMessage?conferenceId=${conference.id}`, {
             headers: {
                 "Authorization": "Bearer " + token,
@@ -33,11 +33,12 @@ export default function ConferenceChat({conference}: { conference: Conference })
         })
         const data = await res.json()
         setMessages(data.chatMessages)
-    }
+    }, [conference.id, token])
+
 
     useEffect(() => {
         fetchMessages().then()
-    }, [conference.id, token, fetchMessages]);
+    }, [fetchMessages]);
 
     const form = useForm<z.infer<typeof messageSchema>>({
         resolver: zodResolver(messageSchema),
