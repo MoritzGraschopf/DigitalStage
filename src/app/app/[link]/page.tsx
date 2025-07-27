@@ -13,6 +13,7 @@ import {ArrowLeft, LoaderCircle} from "lucide-react";
 import ConferenceChat from "@/components/ConferenceChat";
 import {Conference} from "@prisma/client";
 import {useAuth} from "@/context/AuthContext";
+import Link from "next/link";
 
 const participantSchema = z.object({
     password: z.string().min(8, {
@@ -83,9 +84,11 @@ export default function Page({
             <div className="ml-2 mb-2 border rounded-md relative">
 
 
-                <Button className="absolute bottom-2 left-2" onClick={() => setJoined(false)}>
-                    <ArrowLeft/>
-                    Verlassen
+                <Button className="absolute bottom-2 left-2" asChild>
+                    <Link href="/app">
+                        <ArrowLeft/>
+                        Verlassen
+                    </Link>
                 </Button>
             </div>
             <div className="mx-2 mb-2 border rounded-md">
