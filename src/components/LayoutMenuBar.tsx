@@ -9,9 +9,10 @@ import {
     MenubarShortcut,
     MenubarTrigger,
 } from "@/components/ui/menubar";
-import React, { useEffect } from "react";
+import React, {useEffect} from "react";
+import Link from "next/link";
 
-export default function LayoutMenuBar({logout}: {logout: () => void}) {
+export default function LayoutMenuBar({logout}: { logout: () => void }) {
     const handleReload = () => {
         console.log("Neu laden triggered!");
     };
@@ -54,16 +55,20 @@ export default function LayoutMenuBar({logout}: {logout: () => void}) {
                     <MenubarItem onSelect={handleForceReload}>
                         Erzwinge Neu laden <MenubarShortcut>⇧⌘R</MenubarShortcut>
                     </MenubarItem>
-                    <MenubarSeparator />
+                    <MenubarSeparator/>
                     <MenubarItem>Vollbild umschalten</MenubarItem>
                 </MenubarContent>
             </MenubarMenu>
             <MenubarMenu>
                 <MenubarTrigger>Account</MenubarTrigger>
                 <MenubarContent>
-                    <MenubarItem>Profil</MenubarItem>
+                    <MenubarItem>
+                        <Link href="/app/account">
+                            Profil
+                        </Link>
+                    </MenubarItem>
                     <MenubarItem>Einstellungen</MenubarItem>
-                    <MenubarSeparator />
+                    <MenubarSeparator/>
                     <MenubarItem variant="destructive" onSelect={logout}>Abmelden</MenubarItem>
                 </MenubarContent>
             </MenubarMenu>
