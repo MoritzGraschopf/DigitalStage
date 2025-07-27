@@ -67,7 +67,6 @@ export default function LayoutMenuBar({logout}: { logout: () => void }) {
                             Profil
                         </Link>
                     </MenubarItem>
-                    <MenubarItem>Einstellungen</MenubarItem>
                     <MenubarSeparator/>
                     <MenubarItem variant="destructive" onSelect={logout}>Abmelden</MenubarItem>
                 </MenubarContent>

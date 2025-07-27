@@ -1,51 +1,49 @@
-import {Card, CardContent, CardFooter, CardHeader, CardTitle} from "@/components/ui/card";
+import {Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle} from "@/components/ui/card";
 import {Button} from "@/components/ui/button";
 import Link from "next/link";
+import {prisma} from "@/lib/prisma";
 
-const dummyData = [
-    {
-        id: 1,
-        key: Math.random().toString(36).substring(7),
-        titel: "Titel",
-        description: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
-    },
-    {
-        id: 2,
-        key: Math.random().toString(36).substring(7),
-        titel: "Titel",
-        description: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
-    },
-    {
-        id: 3,
-        key: Math.random().toString(36).substring(7),
-        titel: "Titel",
-        description: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
-    },
-    {
-        id: 4,
-        key: Math.random().toString(36).substring(7),
-        titel: "Titel",
-        description: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
-    },
-]
+export default async function Home() {
+    const conferences = await prisma.conference.findMany({
+        select: {
+            id: true,
+            title: true,
+            description: true,
+            status: true,
+            startDate: true,
+            endDate: true,
+            link: true,
+            participationPassword: false,
+        }
+    });
 
-export default function Home() {
     return (
         <div className="grid grid-cols-4 gap-2 m-2">
-            {dummyData.map((item) => (
-                <Card key={item.id}>
+            {conferences.map(conference => (
+                <Card key={conference.id}>
                     <CardHeader>
-                        <CardTitle>{item.titel}</CardTitle>
+                        <CardTitle>{conference.title}</CardTitle>
+                        <CardDescription>
+                            {conference.startDate && conference.endDate ? (
+                                <>
+                                    Von {new Date(conference.startDate).toLocaleDateString("de-DE")} bis{" "}
+                                    {new Date(conference.endDate).toLocaleDateString("de-DE")}
+                                </>
+                            ) : (
+                                "Datum nicht verfügbar"
+                            )}
+                        </CardDescription>
+
                     </CardHeader>
                     <CardContent>
-                        <p>{item.description}</p>
+                        <p>{conference.description}</p>
                     </CardContent>
-                    <CardFooter className="flex-col">
-                        <Button className="w-full" asChild>
-                            <Link href={"/app/" + item.key}>
-                                Beitreten
-                            </Link>
-                        </Button>
+                    <CardFooter>
+                        <Link href={`/app/${conference.link}`}>
+                            <Button>
+                                Zur Konferenz
+                            </Button>
+                        </Link>
                     </CardFooter>
                 </Card>
             ))}

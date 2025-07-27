@@ -36,10 +36,16 @@ export default function RegisterForm() {
 
     async function onSubmit(values: z.infer<typeof registerSchema>) {
         try {
-            await register(values.email, values.name, values.password); // Registrierung mit register() ausführen
+            await register(values.email, values.name, values.password)
             console.log('Erfolgreich registriert!');
         } catch (error) {
-            console.error('Registrierung fehlgeschlagen:', error);
+            if (error instanceof Error) {
+                if (error.message === "User already exists. Please use a different email.") {
+                    form.setError("email", { message: "Ein Benutzer mit dieser Email existiert bereits" });
+                } else {
+                    console.error('Registrierung fehlgeschlagen:', error);
+                }
+            }
         }
     }
 

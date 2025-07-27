@@ -1,13 +1,13 @@
 'use client';
 
-import React, {createContext, useCallback, useContext, useEffect, useState} from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 type User = {
-    id: number
-    name: string
-    email: string
-}
+    id: number;
+    name: string;
+    email: string;
+};
 
 type AuthContextType = {
     token: string | null;
@@ -16,6 +16,7 @@ type AuthContextType = {
     login: (email: string, password: string) => Promise<void>;
     logout: () => void;
     register: (email: string, name: string, password: string) => Promise<void>;
+    fetchWithAuth: <T>(url: string, options?: RequestInit) => Promise<T>;
     isAuthenticated: boolean;
     loading: boolean;
     userLoading: boolean;
@@ -38,6 +39,28 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setLoading(false);
     }, []);
 
+    const fetchWithAuth = useCallback(async <T,>(url: string, options: RequestInit = {}): Promise<T> => {
+        if (!token) {
+            return Promise.reject(new Error('No token found. Please log in.'));
+        }
+
+        const headers = {
+            ...options.headers,
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+        };
+
+        return fetch(url, {
+            ...options,
+            headers,
+        }).then((response) => {
+            if (!response.ok) {
+                return Promise.reject(new Error(`Request failed with status ${response.status}`));
+            }
+            return response.json();
+        });
+    }, [token]);
+
     const login = async (email: string, password: string) => {
         const res = await fetch('/api/login', {
             method: 'POST',
@@ -45,7 +68,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             body: JSON.stringify({ email, password }),
         });
 
-        if (!res.ok) throw new Error('Login fehlgeschlagen');
+        if (!res.ok) throw new Error('Login failed');
 
         const data = await res.json();
         localStorage.setItem('token', data.token);
@@ -64,24 +87,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (!token) return;
         setUserLoading(true);
         try {
-            const res = await fetch('/api/me', {
-                method: 'GET',
-                headers: { Authorization: `Bearer ${token}` },
-            });
-
-            if (!res.ok) {
-                logout();
-                return;
-            }
-            const data = await res.json();
+            const data = await fetchWithAuth<User>('/api/me');
             setUser(data);
         } catch (err) {
             console.error(err);
             setUser(null);
+            logout();
         } finally {
             setUserLoading(false);
         }
-    }, [token, logout]);
+    }, [token, fetchWithAuth, logout]);
 
     useEffect(() => {
         if (token) {
@@ -96,7 +111,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             body: JSON.stringify({ email, name, password }),
         });
 
-        if (!res.ok) throw new Error('Registrierung fehlgeschlagen');
+        if (res.status === 409) {
+            throw new Error('User already exists. Please use a different email.');
+        }
+
+
+        if (!res.ok) throw new Error('Registration failed');
 
         const data = await res.json();
         localStorage.setItem('token', data.token);
@@ -113,6 +133,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 login,
                 logout,
                 register,
+                fetchWithAuth,
                 isAuthenticated: !!token,
                 loading,
                 userLoading,
