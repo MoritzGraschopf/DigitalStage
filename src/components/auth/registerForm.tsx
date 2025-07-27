@@ -10,7 +10,7 @@ const registerSchema = z.object({
     email: z.email({
         error: "Invalide Email Addresse",
     }),
-    username: z.string().min(1, {
+    name: z.string().min(1, {
         error: "Name muss ausgefüllt werden",
     }).max(30, {
         error: "Name darf maximal 30 Zeichen lang sein",
@@ -27,7 +27,7 @@ export default function RegisterForm() {
         resolver: zodResolver(registerSchema),
         defaultValues: {
             email: "",
-            username: "",
+            name: "",
             password: "",
         },
     });
@@ -36,7 +36,7 @@ export default function RegisterForm() {
 
     async function onSubmit(values: z.infer<typeof registerSchema>) {
         try {
-            await register(values.email, values.username, values.password); // Registrierung mit register() ausführen
+            await register(values.email, values.name, values.password); // Registrierung mit register() ausführen
             console.log('Erfolgreich registriert!');
         } catch (error) {
             console.error('Registrierung fehlgeschlagen:', error);
@@ -64,7 +64,7 @@ export default function RegisterForm() {
                 />
                 <FormField
                     control={form.control}
-                    name="username"
+                    name="name"
                     render={({ field }) => (
                         <FormItem>
                             <FormLabel>Name</FormLabel>
