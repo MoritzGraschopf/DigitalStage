@@ -1,21 +1,30 @@
+"use client"
+
 import {Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle} from "@/components/ui/card";
 import {Button} from "@/components/ui/button";
 import Link from "next/link";
-import {prisma} from "@/lib/prisma";
+import {useEffect, useState} from "react";
+import {Conference} from "@prisma/client";
+import {useAuth} from "@/context/AuthContext";
 
-export default async function Home() {
-    const conferences = await prisma.conference.findMany({
-        select: {
-            id: true,
-            title: true,
-            description: true,
-            status: true,
-            startDate: true,
-            endDate: true,
-            link: true,
-            participationPassword: false,
+export default function Home() {
+    const [conferences, setConferences] = useState<Conference[]>([])
+    const { token } = useAuth()
+
+    useEffect(() => {
+        const fetchConferences = async () => {
+            await fetch("/api/conference", {
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    "Content-Type": "application/json"
+                }
+            }).then(res => res.json())
+                .then(data => setConferences(data.conferences))
+                .catch(err => console.error(err))
         }
-    });
+
+        fetchConferences().then()
+    }, [token]);
 
     return (
         <div className="grid grid-cols-4 gap-2 m-2">
