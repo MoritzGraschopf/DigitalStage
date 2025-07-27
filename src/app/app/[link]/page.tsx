@@ -89,7 +89,7 @@ export default function Page({
                 </Button>
             </div>
             <div className="mx-2 mb-2 border rounded-md">
-                <ConferenceChat />
+                <ConferenceChat conference={conference} />
             </div>
         </div>
     ) : (

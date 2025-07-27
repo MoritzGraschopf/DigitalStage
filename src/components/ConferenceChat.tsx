@@ -7,13 +7,12 @@ import {Form, FormControl, FormField, FormItem} from "@/components/ui/form";
 import {Button} from "@/components/ui/button";
 import {SendHorizonal} from "lucide-react";
 import {Input} from "@/components/ui/input";
-import {useState} from "react";
+import {useEffect, useState} from "react";
 import {cn} from "@/lib/utils";
+import {ChatMessage, Conference, User} from "@prisma/client";
+import {useAuth} from "@/context/AuthContext";
 
-type message = {
-    sender: string | "self",
-    message: string
-}
+type ChatMessageWithUser = ChatMessage & { user: User }
 
 const messageSchema = z.object({
     message: z.string().trim().min(1, {
@@ -21,11 +20,24 @@ const messageSchema = z.object({
     })
 })
 
-export default function ConferenceChat() {
-    const [messages, setMessages] = useState<message[]>([{
-        message: "Benis",
-        sender: "Bob"
-    }])
+export default function ConferenceChat({conference}: { conference: Conference }) {
+    const {user, token} = useAuth()
+    const [messages, setMessages] = useState<ChatMessageWithUser[]>([])
+
+    const fetchMessages = async () => {
+        const res = await fetch(`/api/chatMessage?conferenceId=${conference.id}`, {
+            headers: {
+                "Authorization": "Bearer " + token,
+                "Content-Type": "application/json"
+            }
+        })
+        const data = await res.json()
+        setMessages(data.chatMessages)
+    }
+
+    useEffect(() => {
+        fetchMessages().then()
+    }, [conference.id, token, fetchMessages]);
 
     const form = useForm<z.infer<typeof messageSchema>>({
         resolver: zodResolver(messageSchema),
@@ -34,11 +46,18 @@ export default function ConferenceChat() {
         }
     })
 
-    function onSubmit(values: z.infer<typeof messageSchema>) {
-        setMessages((prev) => prev.concat({
-            message: values.message,
-            sender: "self"
-        }))
+    async function onSubmit(values: z.infer<typeof messageSchema>) {
+        await fetch(`/api/chatMessage?conferenceId=${conference.id}`, {
+            method: "POST",
+            headers: {
+                "Authorization": "Bearer " + token,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                message: values.message
+            })
+        })
+        await fetchMessages()
         form.reset()
     }
 
@@ -49,7 +68,7 @@ export default function ConferenceChat() {
                     <FormField
                         control={form.control}
                         name="message"
-                        render={({ field }) => (
+                        render={({field}) => (
                             <FormItem>
                                 <FormControl>
                                     <Input type="text" {...field} autoComplete="off"/>
@@ -65,8 +84,9 @@ export default function ConferenceChat() {
 
             {messages.toReversed().map((message, index) => (
                 <div key={index} className={cn(`p-2 bg-accent text-accent-foreground mx-2 rounded-md w-max flex flex-col 
-                                            ${message.sender === "self" ? "self-end text-right" : "self-start"}`)}>
-                    <span className="text-muted-foreground text-sm">{message.sender === "self" ? "Du" /*TODO: hier Username vom aktuellen Nutzer irgendwie einfügen oder Kontrolle ob es der aktuelle Nutzer ist usw.*/ : message.sender}</span>
+                                            ${message.user.id === user?.id ? "self-end text-right" : "self-start"}`)}>
+                    <span
+                        className="text-muted-foreground text-sm">{message.user.name}</span>
                     <span>{message.message}</span>
                 </div>
             ))}

@@ -24,6 +24,9 @@ export async function GET(
 
         const conference = await prisma.conference.findUnique({
             where: {link}, // Query conference using link
+            include: {
+                chatMessages: true,
+            }
         });
 
         return NextResponse.json(conference);
