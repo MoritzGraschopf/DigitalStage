@@ -8,35 +8,56 @@ export async function POST(req: NextRequest) {
     const { email, password } = body;
 
     if (!email || !password) {
-        return NextResponse.json({ message: 'Email and password are required' }, { status: 400 });
+        return NextResponse.json(
+            { message: 'Email and password are required' },
+            { status: 400 }
+        );
     }
 
     try {
+        // Check if the user exists
         const user = await prisma.user.findUnique({ where: { email } });
 
         if (!user) {
-            return NextResponse.json({ message: 'User not found' }, { status: 401 });
+            return NextResponse.json(
+                { message: 'Invalid email or password' },
+                { status: 401 }
+            );
         }
 
+        // Verify the password
         const passwordMatch = await bcrypt.compare(password, user.passwordHash);
         if (!passwordMatch) {
-            return NextResponse.json({ message: 'Password not match' }, { status: 401 });
+            return NextResponse.json(
+                { message: 'Invalid email or password' },
+                { status: 401 }
+            );
         }
 
+        // Ensure JWT secret is set
         const secret = process.env.JWT_SECRET;
         if (!secret) {
-            return NextResponse.json({ message: 'JWT secret missing' }, { status: 500 });
+            throw new Error("JWT secret must be defined in the environment variables.");
         }
 
+        // Generate JWT token
         const token = jwt.sign(
             { userId: user.id, email: user.email },
             secret,
-            { expiresIn: '1h' }
+            { expiresIn: '1h' } // Token valid for 1 hour
         );
 
-        return NextResponse.json({ token }, { status: 200 });
+        // Return the token
+        return NextResponse.json({ 
+            message: "Login successful",
+            token
+        }, { status: 200 });
+
     } catch (error) {
         console.error('Login error:', error);
-        return NextResponse.json({ message: 'Internal Server Error' }, { status: 500 });
+        return NextResponse.json(
+            { message: 'Internal Server Error' },
+            { status: 500 }
+        );
     }
 }

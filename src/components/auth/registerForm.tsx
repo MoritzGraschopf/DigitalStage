@@ -1,41 +1,46 @@
-import {Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage} from "@/components/ui/form";
-import {Input} from "@/components/ui/input";
-import {Button} from "@/components/ui/button";
-import {useForm} from "react-hook-form";
-import {z} from "zod";
-import {zodResolver} from "@hookform/resolvers/zod";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useAuth } from "@/context/AuthContext";
 
 const registerSchema = z.object({
     email: z.email({
-        error: "Invalide Email Addresse"
+        error: "Invalide Email Addresse",
     }),
-    username: z.string().min(1, {
-        error: "Name muss ausgefüllt werden"
+    name: z.string().min(1, {
+        error: "Name muss ausgefüllt werden",
     }).max(30, {
-        error: "Name darf maximal 30 Zeichen lang sein"
+        error: "Name darf maximal 30 Zeichen lang sein",
     }),
     password: z.string().min(8, {
-        error: "Passwort muss mindestens 8 Zeichen lang sein"
+        error: "Passwort muss mindestens 8 Zeichen lang sein",
     }).max(20, {
-        error: "Passwort darf maximal 20 Zeichen lang sein"
-    })
-})
+        error: "Passwort darf maximal 20 Zeichen lang sein",
+    }),
+});
 
 export default function RegisterForm() {
     const form = useForm<z.infer<typeof registerSchema>>({
         resolver: zodResolver(registerSchema),
         defaultValues: {
             email: "",
-            username: "",
+            name: "",
             password: "",
         },
-    })
+    });
 
-    // 2. Define a submit handler.
-    function onSubmit(values: z.infer<typeof registerSchema>) {
-        // Do something with the form values.
-        // ✅ This will be type-safe and validated.
-        console.log(values)
+    const { register } = useAuth(); // Importiere register aus dem Auth-Kontext
+
+    async function onSubmit(values: z.infer<typeof registerSchema>) {
+        try {
+            await register(values.email, values.name, values.password); // Registrierung mit register() ausführen
+            console.log('Erfolgreich registriert!');
+        } catch (error) {
+            console.error('Registrierung fehlgeschlagen:', error);
+        }
     }
 
     return (
@@ -59,7 +64,7 @@ export default function RegisterForm() {
                 />
                 <FormField
                     control={form.control}
-                    name="username"
+                    name="name"
                     render={({ field }) => (
                         <FormItem>
                             <FormLabel>Name</FormLabel>
@@ -80,9 +85,8 @@ export default function RegisterForm() {
                         <FormItem>
                             <FormLabel>Passwort</FormLabel>
                             <FormControl>
-                                <Input {...field} />
+                                <Input type="password" placeholder="••••••••" {...field} />
                             </FormControl>
-
                             <FormMessage />
                         </FormItem>
                     )}
@@ -90,5 +94,5 @@ export default function RegisterForm() {
                 <Button type="submit">Registrieren</Button>
             </form>
         </Form>
-    )
+    );
 }

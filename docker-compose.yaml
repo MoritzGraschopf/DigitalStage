@@ -8,9 +8,10 @@ services:
             - '3000:3000'
         depends_on:
             - db
-        environment:
-            DATABASE_URL: postgres://digitalstage:digitalStage123@db:5432/digitalstage
+        env_file:
+            - .env
         restart: unless-stopped
+        command: sh -c "npx prisma migrate deploy && npm start"
 
     db:
         image: postgres:16
