@@ -5,10 +5,10 @@ import { createServer } from 'http';
 const server = createServer();
 const wss = new WebSocketServer({ server });
 
-wss.on('connection', (ws: WebSocket) => {
+wss.on('connection', (ws) => {
     console.log('🟢 Client connected');
 
-    ws.on('message', async (data: WebSocket.RawData) => {
+    ws.on('message', async (data) => {
         const msg = JSON.parse(data.toString());
 
         // Beispiel-Datenvalidierung

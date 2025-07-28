@@ -13,6 +13,19 @@ services:
         restart: unless-stopped
         command: sh -c "npx prisma migrate deploy && npm start"
 
+    websocket:
+        build:
+            context: .
+            dockerfile: Dockerfile.ws
+        container_name: digitalStageSocket
+        depends_on:
+            - db
+        ports:
+            - '3010:3001'
+        env_file:
+            - .env
+        restart: unless-stopped
+
     db:
         image: postgres:16
         restart: always

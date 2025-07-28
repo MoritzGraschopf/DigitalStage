@@ -42,7 +42,7 @@ export default function ConferenceChat({conference}: { conference: Conference })
     }, [fetchMessages]);
 
     useEffect(() => {
-        const socket = new WebSocket('ws://localhost:3001');
+        const socket = new WebSocket(process.env.NEXT_PUBLIC_WS_URL!);
 
         socket.onmessage = (event) => {
             const msg = JSON.parse(event.data);
