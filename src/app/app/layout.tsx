@@ -3,7 +3,7 @@
 import React, {useEffect} from "react";
 import LayoutMenuBar from "@/components/LayoutMenuBar";
 import {useAuth} from "@/context/AuthContext";
-import {useRouter} from "next/navigation";
+import {usePathname, useRouter} from "next/navigation";
 import {LoaderCircle} from "lucide-react";
 
 export default function AppLayout({
@@ -13,12 +13,13 @@ export default function AppLayout({
 }>) {
     const { isAuthenticated, loading, logout } = useAuth();
     const router = useRouter();
+    const pathname = usePathname();
 
     useEffect(() => {
         if (!loading && !isAuthenticated) {
-            router.push('/auth');
+            router.push(`/auth?redirect=${pathname}`);
         }
-    }, [loading, isAuthenticated, router]);
+    }, [loading, isAuthenticated, router, pathname]);
 
     if (!isAuthenticated) return <div className="text-xl h-screen grid place-items-center">Weiterleitung...</div>
 

@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuth } from "@/context/AuthContext";
+import {useSearchParams} from "next/navigation";
 
 const registerSchema = z.object({
     email: z.email({
@@ -23,6 +24,10 @@ const registerSchema = z.object({
 });
 
 export default function RegisterForm() {
+    const { register } = useAuth(); // Importiere register aus dem Auth-Kontext
+    const searchParams = useSearchParams();
+    const redirect = searchParams.get('redirect') || '/app';
+
     const form = useForm<z.infer<typeof registerSchema>>({
         resolver: zodResolver(registerSchema),
         defaultValues: {
@@ -32,11 +37,9 @@ export default function RegisterForm() {
         },
     });
 
-    const { register } = useAuth(); // Importiere register aus dem Auth-Kontext
-
     async function onSubmit(values: z.infer<typeof registerSchema>) {
         try {
-            await register(values.email, values.name, values.password)
+            await register(values.email, values.name, values.password, redirect)
             console.log('Erfolgreich registriert!');
         } catch (error) {
             if (error instanceof Error) {

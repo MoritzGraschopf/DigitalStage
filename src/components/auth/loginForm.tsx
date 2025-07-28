@@ -5,6 +5,7 @@ import {useForm} from "react-hook-form";
 import {z} from "zod";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {useAuth} from "@/context/AuthContext";
+import {useSearchParams} from "next/navigation";
 
 const loginSchema = z.object({
     email: z.email({
@@ -19,6 +20,8 @@ const loginSchema = z.object({
 
 export default function LoginForm() {
     const { login } = useAuth()
+    const searchParams = useSearchParams();
+    const redirect = searchParams.get('redirect') || '/app';
 
     const form = useForm<z.infer<typeof loginSchema>>({
         resolver: zodResolver(loginSchema),
@@ -34,7 +37,7 @@ export default function LoginForm() {
         // ✅ This will be type-safe and validated.
         console.log(values)
 
-        await login(values.email, values.password)
+        await login(values.email, values.password, redirect)
             .catch(error => {
                 console.log(error)
 

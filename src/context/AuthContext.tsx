@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import {usePathname, useRouter} from 'next/navigation';
 
 type User = {
     id: number;
@@ -13,9 +13,9 @@ type AuthContextType = {
     token: string | null;
     user: User | null;
     fetchUser: () => Promise<void>;
-    login: (email: string, password: string) => Promise<void>;
+    login: (email: string, password: string, redirect: string) => Promise<void>;
     logout: () => void;
-    register: (email: string, name: string, password: string) => Promise<void>;
+    register: (email: string, name: string, password: string, redirect: string) => Promise<void>;
     fetchWithAuth: <T>(url: string, options?: RequestInit) => Promise<T>;
     isAuthenticated: boolean;
     loading: boolean;
@@ -30,6 +30,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const [loading, setLoading] = useState(true);
     const [userLoading, setUserLoading] = useState(false);
     const router = useRouter();
+    const pathname = usePathname()
 
     useEffect(() => {
         const savedToken = localStorage.getItem('token');
@@ -61,7 +62,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         });
     }, [token]);
 
-    const login = async (email: string, password: string) => {
+    const login = async (email: string, password: string, redirect: string) => {
         const res = await fetch('/api/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -73,15 +74,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const data = await res.json();
         localStorage.setItem('token', data.token);
         setToken(data.token);
-        router.push('/app');
+        router.push(redirect);
     };
 
     const logout = useCallback(() => {
         localStorage.removeItem('token');
         setToken(null);
         setUser(null);
-        router.push('/auth');
-    }, [router]);
+        router.push('/auth?redirect=' + pathname);
+    }, [router, pathname]);
 
     const fetchUser = useCallback(async () => {
         if (!token) return;
@@ -104,7 +105,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
     }, [token, fetchUser]);
 
-    const register = async (email: string, name: string, password: string) => {
+    const register = async (email: string, name: string, password: string, redirect: string) => {
         const res = await fetch('/api/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -121,7 +122,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const data = await res.json();
         localStorage.setItem('token', data.token);
         setToken(data.token);
-        router.push('/app');
+        router.push(redirect);
     };
 
     return (
