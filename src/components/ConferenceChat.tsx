@@ -55,6 +55,16 @@ export default function ConferenceChat({conference}: { conference: Conference })
         return () => socket.close();
     }, []);
 
+    useEffect(() => {
+        if (!ws) return;
+        ws.onopen = () => {
+            ws.send(JSON.stringify({
+                type: "init",
+                conferenceId: conference.id,
+            }));
+        };
+    }, [ws, conference.id]);
+
     const form = useForm<z.infer<typeof messageSchema>>({
         resolver: zodResolver(messageSchema),
         defaultValues: {
@@ -74,6 +84,7 @@ export default function ConferenceChat({conference}: { conference: Conference })
             })
         })
         if (!!ws) ws.send(JSON.stringify({
+            type: "chatMessage",
             message: values.message,
             userId: user?.id,
             conferenceId: conference.id,
