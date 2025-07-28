@@ -1,30 +1,47 @@
 "use client"
 
-import {Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle} from "@/components/ui/card";
-import {Button} from "@/components/ui/button";
+import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import {useEffect, useState} from "react";
-import {Conference} from "@prisma/client";
-import {useAuth} from "@/context/AuthContext";
+import { useEffect, useState } from "react";
+import { Conference } from "@prisma/client";
+import { useAuth } from "@/context/AuthContext";
+import { Check, Copy } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export default function Home() {
-    const [conferences, setConferences] = useState<Conference[]>([])
-    const {token} = useAuth()
+    const [conferences, setConferences] = useState<Conference[]>([]);
+    const { token } = useAuth();
+    const [copiedLinkId, setCopiedLinkId] = useState<number | null>(null);
 
     useEffect(() => {
         const fetchConferences = async () => {
-            await fetch("/api/conference", {
-                headers: {
-                    "Authorization": "Bearer " + token,
-                    "Content-Type": "application/json"
-                }
-            }).then(res => res.json())
-                .then(data => setConferences(data.conferences))
-                .catch(err => console.error(err))
-        }
+            try {
+                const res = await fetch("/api/conference", {
+                    headers: {
+                        "Authorization": "Bearer " + token,
+                        "Content-Type": "application/json"
+                    }
+                });
+                const data = await res.json();
+                setConferences(data.conferences);
+            } catch (err) {
+                console.error(err);
+            }
+        };
 
-        fetchConferences().then()
+        fetchConferences().then();
     }, [token]);
+
+    const handleCopy = async (link: string, id: number) => {
+        try {
+            await navigator.clipboard.writeText("http://localhost:3000/app/" + link);
+            setCopiedLinkId(id);
+            setTimeout(() => setCopiedLinkId(null), 2000); // Reset nach 2 Sekunden
+        } catch (err) {
+            console.error('Kopieren fehlgeschlagen:', err);
+        }
+    };
 
     return (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-2 m-2">
@@ -42,7 +59,24 @@ export default function Home() {
                                 "Datum nicht verfügbar"
                             )}
                         </CardDescription>
-
+                        <CardAction>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        onClick={() => handleCopy(conference.link, conference.id)}
+                                        size="icon"
+                                        variant="outline"
+                                    >
+                                        {copiedLinkId === conference.id ? <Check /> : <Copy />}
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>
+                                        {copiedLinkId === conference.id ? "Kopiert!" : "Link kopieren"}
+                                    </p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </CardAction>
                     </CardHeader>
                     <CardContent>
                         <p>{conference.description}</p>

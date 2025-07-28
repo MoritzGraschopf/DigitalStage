@@ -9,11 +9,12 @@ import {Button} from "@/components/ui/button";
 import {z} from "zod"
 import {zodResolver} from "@hookform/resolvers/zod";
 import {Input} from "@/components/ui/input";
-import {ArrowLeft, LoaderCircle} from "lucide-react";
+import {ArrowLeft, Check, Copy, LoaderCircle} from "lucide-react";
 import ConferenceChat from "@/components/ConferenceChat";
 import {Conference} from "@prisma/client";
 import {useAuth} from "@/context/AuthContext";
 import Link from "next/link";
+import {Tooltip, TooltipContent, TooltipTrigger} from "@/components/ui/tooltip";
 
 const participantSchema = z.object({
     password: z.string().min(8, {
@@ -29,8 +30,19 @@ export default function Page({
     const [conference, setConference] = useState<Conference | null>(null)
     const [joined, setJoined] = useState(false)
     const [showText, setShowText] = useState(false);
+    const [copied, setCopied] = useState(false);
     const { fetchWithAuth } = useAuth()
     const { link } = use(params);
+
+    const handleCopy = async () => {
+        try {
+            await navigator.clipboard.writeText("http://localhost:3000/app/" + link);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000); // nach 2 Sekunden zurücksetzen
+        } catch (err) {
+            console.error('Kopieren fehlgeschlagen:', err);
+        }
+    };
 
     useEffect(() => {
         // Show text after 5 seconds
@@ -84,12 +96,26 @@ export default function Page({
             <div className="ml-2 mb-2 border rounded-md relative">
 
 
-                <Button className="absolute bottom-2 left-2" asChild>
-                    <Link href="/app">
-                        <ArrowLeft/>
-                        Verlassen
-                    </Link>
-                </Button>
+                <div className="absolute bottom-2 left-2">
+                    <Button asChild>
+                        <Link href="/app">
+                            <ArrowLeft/>
+                            Verlassen
+                        </Link>
+                    </Button>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button onClick={handleCopy} size="icon" variant="outline" className="ml-2">
+                                {copied ? <Check/> : <Copy/>}
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>
+                                {copied ? "Kopiert!" : "Link kopieren"}
+                            </p>
+                        </TooltipContent>
+                    </Tooltip>
+                </div>
             </div>
             <div className="mx-2 mb-2 border rounded-md">
                 <ConferenceChat conference={conference} />
