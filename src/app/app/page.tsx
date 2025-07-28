@@ -9,7 +9,7 @@ import {useAuth} from "@/context/AuthContext";
 
 export default function Home() {
     const [conferences, setConferences] = useState<Conference[]>([])
-    const { token } = useAuth()
+    const {token} = useAuth()
 
     useEffect(() => {
         const fetchConferences = async () => {
@@ -27,7 +27,7 @@ export default function Home() {
     }, [token]);
 
     return (
-        <div className="grid grid-cols-4 gap-2 m-2">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-2 m-2">
             {conferences.map(conference => (
                 <Card key={conference.id}>
                     <CardHeader>
