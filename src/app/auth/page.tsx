@@ -1,9 +1,8 @@
-"use client"
-
 import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
 import LoginForm from "@/components/auth/loginForm";
 import RegisterForm from "@/components/auth/registerForm";
+import {Suspense} from "react";
 
 export default function LoginPage() {
     return (
@@ -22,7 +21,9 @@ export default function LoginPage() {
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <LoginForm />
+                            <Suspense>
+                                <LoginForm />
+                            </Suspense>
                         </CardContent>
                     </Card>
                 </TabsContent>
@@ -35,7 +36,9 @@ export default function LoginPage() {
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <RegisterForm />
+                            <Suspense>
+                                <RegisterForm />
+                            </Suspense>
                         </CardContent>
                     </Card>
                 </TabsContent>
