@@ -89,35 +89,31 @@ export default function Page({
     }
 
     return joined ? (
-        <div className="grid grid-cols-[3fr_1fr] grid-rows-[min-content_1fr] h-screen w-screen fixed top-0 left-0 z-[-1]">
+        <div className="grid grid-cols-[3fr_1fr] grid-rows-[min-content_1fr] h-screen w-screen fixed top-0 left-0 z-[-1] overflow-hidden">
             <div className="h-14"></div>
             <div></div>
 
-            <div className="ml-2 mb-2 border rounded-md relative">
-
-
+            <div className="ml-2 mb-2 border rounded-md relative h-full">
                 <div className="absolute bottom-2 left-2">
                     <Button asChild>
                         <Link href="/app">
-                            <ArrowLeft/>
+                            <ArrowLeft />
                             Verlassen
                         </Link>
                     </Button>
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <Button onClick={handleCopy} size="icon" variant="outline" className="ml-2">
-                                {copied ? <Check/> : <Copy/>}
+                                {copied ? <Check /> : <Copy />}
                             </Button>
                         </TooltipTrigger>
                         <TooltipContent>
-                            <p>
-                                {copied ? "Kopiert!" : "Link kopieren"}
-                            </p>
+                            <p>{copied ? "Kopiert!" : "Link kopieren"}</p>
                         </TooltipContent>
                     </Tooltip>
                 </div>
             </div>
-            <div className="mx-2 mb-2 border rounded-md">
+            <div className="mx-2 mb-2 border rounded-md h-full flex-grow overflow-hidden">
                 <ConferenceChat conference={conference} />
             </div>
         </div>

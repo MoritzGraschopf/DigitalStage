@@ -11,6 +11,7 @@ import {useCallback, useEffect, useState} from "react";
 import {cn} from "@/lib/utils";
 import {ChatMessage, Conference, User} from "@prisma/client";
 import {useAuth} from "@/context/AuthContext";
+import {ScrollArea} from "@/components/ui/scroll-area";
 
 type ChatMessageWithUser = ChatMessage & { user: User }
 
@@ -116,14 +117,24 @@ export default function ConferenceChat({conference}: { conference: Conference })
                 </form>
             </Form>
 
-            {messages.toReversed().map((message, index) => (
-                <div key={index} className={cn(`p-2 bg-accent text-accent-foreground mx-2 rounded-md w-max flex flex-col 
-                                            ${message.user.id === user?.id ? "self-end text-right" : "self-start"}`)}>
-                    <span
-                        className="text-muted-foreground text-sm">{message.user.name}</span>
-                    <span>{message.message}</span>
+            <ScrollArea className="h-full overflow-y-auto">
+                <div className="flex flex-col-reverse justify-end h-full gap-2 flex-grow mx-2 mt-2">
+                    <div className="flex-grow" /> {/* Platzhalter für flexibles Layout */}
+                    {messages.length > 0 &&
+                        messages.toReversed().map((message, index) => (
+                            <div
+                                key={index}
+                                className={cn(
+                                    `p-2 bg-accent text-accent-foreground mx-2 rounded-md w-max flex flex-col 
+                        ${message.user.id === user?.id ? "self-end text-right" : "self-start"}`
+                                )}
+                            >
+                                <span className="text-muted-foreground text-sm">{message.user.name}</span>
+                                <span>{message.message}</span>
+                            </div>
+                        ))}
                 </div>
-            ))}
+            </ScrollArea>
         </div>
     )
 }
