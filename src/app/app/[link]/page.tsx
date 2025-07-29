@@ -172,8 +172,7 @@ export default function Page({
                                 <div className="text-right">
                                     <Tooltip>
                                         <TooltipTrigger asChild>
-                                            <Button onClick={handleCopy} size="icon" variant="outline" className="ml-2"
-                                                    disabled={disabled}>
+                                            <Button onClick={handleCopy} size="icon" variant="outline">
                                                 {copied ? <Check/> : <Copy/>}
                                             </Button>
                                         </TooltipTrigger>

@@ -128,7 +128,7 @@ export default function Home() {
                                                 onClick={() => handleCopy(conference.link, conference.id)}
                                                 size="icon"
                                                 variant="outline"
-                                                disabled
+                                                className="opacity-50"
                                             >
                                                 {copiedLinkId === conference.id ? <Check/> : <Copy/>}
                                             </Button>
