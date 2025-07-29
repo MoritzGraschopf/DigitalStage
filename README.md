@@ -27,5 +27,5 @@ Ein Diplomarbeitsprojekt zur Entwicklung einer Streaming-Plattform, bei der **Te
 
 ```env
 DATABASE_URL=postgresql://digitalstage:digitalStage123@db:5432/digitalstage
-NEXTAUTH_SECRET=your-secret
+JWT_SECRET=your-secret
 NEXT_PUBLIC_WS_URL=ws://localhost:3010
