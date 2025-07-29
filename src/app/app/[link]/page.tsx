@@ -9,18 +9,30 @@ import {Button} from "@/components/ui/button";
 import {z} from "zod"
 import {zodResolver} from "@hookform/resolvers/zod";
 import {Input} from "@/components/ui/input";
-import {ArrowLeft, Check, Copy, LoaderCircle} from "lucide-react";
+import {ArrowLeft, Check, Copy, Info, LoaderCircle} from "lucide-react";
 import ConferenceChat from "@/components/ConferenceChat";
 import {Conference} from "@prisma/client";
 import {useAuth} from "@/context/AuthContext";
 import Link from "next/link";
 import {Tooltip, TooltipContent, TooltipTrigger} from "@/components/ui/tooltip";
+import {Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger} from "@/components/ui/sheet";
+import {Separator} from "@/components/ui/separator";
 
 const participantSchema = z.object({
     password: z.string().min(8, {
         error: "Passwort muss mindestens 8 Zeichen lang sein"
     })
 })
+
+const mapStatus = (status: string): string => {
+    const statusMap: Record<string, string> = {
+        SCHEDULED: "Geplant",
+        ACTIVE: "Aktiv",
+        ENDED: "Beendet",
+    };
+
+    return statusMap[status] || "Unbekannt";
+};
 
 export default function Page({
                                  params,
@@ -101,16 +113,60 @@ export default function Page({
                             Verlassen
                         </Link>
                     </Button>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button onClick={handleCopy} size="icon" variant="outline" className="ml-2">
-                                {copied ? <Check /> : <Copy />}
+
+                    <Sheet>
+                        <SheetTrigger asChild>
+                            <Button size="icon" variant="outline" className="ml-2">
+                                <Info />
                             </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            <p>{copied ? "Kopiert!" : "Link kopieren"}</p>
-                        </TooltipContent>
-                    </Tooltip>
+                        </SheetTrigger>
+                        <SheetContent>
+                            <SheetHeader>
+                                <SheetTitle>Konferenzinfo</SheetTitle>
+                                <SheetDescription>
+                                    Live-Stream mit Chat für alle Zuschauer dieser Konferenz.
+                                </SheetDescription>
+                            </SheetHeader>
+                            <div className="grid grid-cols-[min-content_1fr] items-center gap-2 px-4">
+                                <div className="font-medium">Titel:</div>
+                                <div className="text-right">{conference.title}</div>
+
+                                <Separator className="col-span-2"/>
+
+                                <div className="font-medium">Beschreibung:</div>
+                                <div className="text-right">{conference.description}</div>
+
+                                <Separator className="col-span-2"/>
+
+                                <div className="font-medium">Von:</div>
+                                <div className="text-right">{!!conference.startDate ? new Date(conference.startDate).toLocaleDateString("de-DE") : "Datum nicht verfügbar"}</div>
+
+                                <div className="font-medium">Bis:</div>
+                                <div className="text-right">{!!conference.endDate ? new Date(conference.endDate).toLocaleDateString("de-DE") : "Datum nicht verfügbar"}</div>
+
+                                <Separator className="col-span-2"/>
+
+                                <div className="font-medium">Status:</div>
+                                <div className="text-right">{mapStatus(conference.status)}</div>
+
+                                <Separator className="col-span-2"/>
+
+                                <div className="font-medium">Link:</div>
+                                <div className="text-right">
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button onClick={handleCopy} size="icon" variant="outline" className="ml-2">
+                                                {copied ? <Check /> : <Copy />}
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="left">
+                                            <p>{copied ? "Kopiert!" : "Link kopieren"}</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </div>
+                            </div>
+                        </SheetContent>
+                    </Sheet>
                 </div>
             </div>
             <div className="mx-2 mb-2 border rounded-md h-full flex-grow overflow-hidden">
