@@ -39,12 +39,13 @@ export default function Page({
                              }: {
     params: Promise<{ link: string }>
 }) {
+    const [disabled, setDisabled] = useState<boolean>(false)
     const [conference, setConference] = useState<Conference | null>(null)
     const [joined, setJoined] = useState(false)
     const [showText, setShowText] = useState(false);
     const [copied, setCopied] = useState(false);
-    const { fetchWithAuth } = useAuth()
-    const { link } = use(params);
+    const {fetchWithAuth} = useAuth()
+    const {link} = use(params);
 
     const handleCopy = async () => {
         try {
@@ -69,6 +70,7 @@ export default function Page({
         const fetchConference = async () => {
             try {
                 const res = await fetchWithAuth<Conference>(`/api/conference/${link}`)
+                if (res.status === "ENDED") setDisabled(true)
                 setConference(res)
             } catch (err) {
                 console.error(err)
@@ -93,23 +95,36 @@ export default function Page({
 
     if (!conference) {
         return (
-            <div className="h-screen w-screen fixed top-0 left-0 z-[-1] flex justify-center items-center flex-col gap-2">
-                <LoaderCircle className="animate-spin" />
-                {showText && <p className="text-muted-foreground">Die Konferenz ist möglicherweise nicht mehr verfügbar.</p>}
+            <div
+                className="h-screen w-screen fixed top-0 left-0 z-[-1] flex justify-center items-center flex-col gap-2">
+                <LoaderCircle className="animate-spin"/>
+                {showText &&
+                    <p className="text-muted-foreground">Die Konferenz ist möglicherweise nicht mehr verfügbar.</p>}
             </div>
         )
     }
 
     return joined ? (
-        <div className="grid grid-cols-[3fr_1fr] grid-rows-[min-content_1fr] h-screen w-screen fixed top-0 left-0 z-[-1] overflow-hidden">
-            <div className="h-14"></div>
+        <div
+            className="grid grid-cols-[3fr_1fr] grid-rows-[min-content_1fr] h-screen w-screen fixed top-0 left-0 z-[-1] overflow-hidden">
+            <div className="h-13"></div>
             <div></div>
 
-            <div className="ml-2 mb-2 border rounded-md relative h-full">
+            <div className="ml-2 border rounded-md relative h-full">
+                {disabled && (
+                    <div className="h-full justify-center items-center flex flex-col">
+                        <div className="font-medium text-xl">Konferenz beendet</div>
+                        <div className="text-muted-foreground">
+                            Sie können die Konferenz verlassen oder den Chatverlauf
+                            sowie die Konferenzinformationen einsehen
+                        </div>
+                    </div>
+                )}
+
                 <div className="absolute bottom-2 left-2">
                     <Button asChild>
                         <Link href="/app">
-                            <ArrowLeft />
+                            <ArrowLeft/>
                             Verlassen
                         </Link>
                     </Button>
@@ -117,7 +132,7 @@ export default function Page({
                     <Sheet>
                         <SheetTrigger asChild>
                             <Button size="icon" variant="outline" className="ml-2">
-                                <Info />
+                                <Info/>
                             </Button>
                         </SheetTrigger>
                         <SheetContent>
@@ -139,10 +154,12 @@ export default function Page({
                                 <Separator className="col-span-2"/>
 
                                 <div className="font-medium">Von:</div>
-                                <div className="text-right">{!!conference.startDate ? new Date(conference.startDate).toLocaleDateString("de-DE") : "Datum nicht verfügbar"}</div>
+                                <div
+                                    className="text-right">{!!conference.startDate ? new Date(conference.startDate).toLocaleDateString("de-DE") : "Datum nicht verfügbar"}</div>
 
                                 <div className="font-medium">Bis:</div>
-                                <div className="text-right">{!!conference.endDate ? new Date(conference.endDate).toLocaleDateString("de-DE") : "Datum nicht verfügbar"}</div>
+                                <div
+                                    className="text-right">{!!conference.endDate ? new Date(conference.endDate).toLocaleDateString("de-DE") : "Datum nicht verfügbar"}</div>
 
                                 <Separator className="col-span-2"/>
 
@@ -155,8 +172,8 @@ export default function Page({
                                 <div className="text-right">
                                     <Tooltip>
                                         <TooltipTrigger asChild>
-                                            <Button onClick={handleCopy} size="icon" variant="outline" className="ml-2">
-                                                {copied ? <Check /> : <Copy />}
+                                            <Button onClick={handleCopy} size="icon" variant="outline">
+                                                {copied ? <Check/> : <Copy/>}
                                             </Button>
                                         </TooltipTrigger>
                                         <TooltipContent side="left">
@@ -169,8 +186,8 @@ export default function Page({
                     </Sheet>
                 </div>
             </div>
-            <div className="mx-2 mb-2 border rounded-md h-full flex-grow overflow-hidden">
-                <ConferenceChat conference={conference} />
+            <div className="mx-2 border rounded-md h-full flex-grow overflow-hidden">
+                <ConferenceChat conference={conference} disabled={disabled}/>
             </div>
         </div>
     ) : (
@@ -187,7 +204,7 @@ export default function Page({
                             <CardDescription>Als Zuschauer beitreten</CardDescription>
                         </CardHeader>
                         <CardFooter>
-                            <Button className="w-full" onClick={() => setJoined(true)}>
+                            <Button size="sm" className="w-full" onClick={() => setJoined(true)}>
                                 Beitreten
                             </Button>
                         </CardFooter>
@@ -205,7 +222,7 @@ export default function Page({
                                     <FormField
                                         control={form.control}
                                         name="password"
-                                        render={({ field }) => (
+                                        render={({field}) => (
                                             <FormItem>
                                                 <FormLabel>Passwort</FormLabel>
                                                 <FormControl>
@@ -214,11 +231,11 @@ export default function Page({
                                                 <FormDescription>
                                                     Passwort, welches vom Host festgelegt worden ist.
                                                 </FormDescription>
-                                                <FormMessage />
+                                                <FormMessage/>
                                             </FormItem>
                                         )}
                                     />
-                                    <Button className="w-full">
+                                    <Button className="w-full" size="sm">
                                         Beitreten
                                     </Button>
                                 </form>

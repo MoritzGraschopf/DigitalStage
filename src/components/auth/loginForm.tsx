@@ -83,7 +83,7 @@ export default function LoginForm() {
                         </FormItem>
                     )}
                 />
-                <Button type="submit">Anmelden</Button>
+                <Button type="submit" size="sm">Anmelden</Button>
             </form>
         </Form>
     )

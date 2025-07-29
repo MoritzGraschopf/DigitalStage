@@ -21,7 +21,7 @@ const messageSchema = z.object({
     })
 })
 
-export default function ConferenceChat({conference}: { conference: Conference }) {
+export default function ConferenceChat({conference, disabled}: { conference: Conference, disabled: boolean }) {
     const {user, token} = useAuth()
     const [messages, setMessages] = useState<ChatMessageWithUser[]>([])
     const [ws, setWs] = useState<WebSocket | null>(null);
@@ -111,7 +111,7 @@ export default function ConferenceChat({conference}: { conference: Conference })
                             </FormItem>
                         )}
                     />
-                    <Button size="icon" type="submit">
+                    <Button size="icon" type="submit" disabled={disabled}>
                         <SendHorizonal/>
                     </Button>
                 </form>
