@@ -7,7 +7,7 @@ import {Form, FormControl, FormField, FormItem} from "@/components/ui/form";
 import {Button} from "@/components/ui/button";
 import {SendHorizonal} from "lucide-react";
 import {Input} from "@/components/ui/input";
-import {useCallback, useEffect, useState} from "react";
+import {useCallback, useEffect, useRef, useState} from "react";
 import {cn} from "@/lib/utils";
 import {ChatMessage, Conference, User} from "@prisma/client";
 import {useAuth} from "@/context/AuthContext";
@@ -25,6 +25,7 @@ export default function ConferenceChat({conference, disabled}: { conference: Con
     const {user, token} = useAuth()
     const [messages, setMessages] = useState<ChatMessageWithUser[]>([])
     const [ws, setWs] = useState<WebSocket | null>(null);
+    const bottomRef = useRef<HTMLDivElement | null>(null);
 
     const fetchMessages = useCallback(async () => {
         const res = await fetch(`/api/chatMessage?conferenceId=${conference.id}`, {
@@ -65,6 +66,11 @@ export default function ConferenceChat({conference, disabled}: { conference: Con
             }));
         };
     }, [ws, conference.id]);
+
+    useEffect(() => {
+        if (!bottomRef.current) return;
+        bottomRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+    }, [messages])
 
     const form = useForm<z.infer<typeof messageSchema>>({
         resolver: zodResolver(messageSchema),
@@ -118,10 +124,10 @@ export default function ConferenceChat({conference, disabled}: { conference: Con
             </Form>
 
             <ScrollArea className="h-full overflow-y-auto">
-                <div className="flex flex-col-reverse justify-end h-full gap-2 flex-grow mx-2 mt-2">
+                <div className="flex flex-col justify-end h-full gap-2 flex-grow mx-2 mt-2">
                     <div className="flex-grow" /> {/* Platzhalter für flexibles Layout */}
                     {messages.length > 0 &&
-                        messages.toReversed().map((message, index) => (
+                        messages.map((message, index) => (
                             <div
                                 key={index}
                                 className={cn(
@@ -133,6 +139,7 @@ export default function ConferenceChat({conference, disabled}: { conference: Con
                                 <span>{message.message}</span>
                             </div>
                         ))}
+                    <div ref={bottomRef} />
                 </div>
             </ScrollArea>
         </div>
