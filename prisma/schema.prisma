@@ -21,7 +21,7 @@ enum InvitationStatus {
 }
 
 enum Role {
-  HOST
+  ORGANIZER
   PARTICIPANT
   VIEWER
 }
@@ -31,7 +31,7 @@ model User {
   name           String           @default("")
   email          String           @unique
   passwordHash   String
-  conferences    Conference[]     @relation("Owner")
+  conferences    Conference[]     @relation("Organizer")
   chatMessages   ChatMessage[]
   participations UserConference[]
 }
@@ -42,11 +42,11 @@ model Conference {
   description           String?
   startDate             DateTime?
   endDate               DateTime?
-  status                ConferenceStatus
+  status                ConferenceStatus @default(SCHEDULED)
   link                  String           @unique
   participationPassword String?
   userId                Int
-  user                  User             @relation("Owner", fields: [userId], references: [id])
+  user                  User             @relation("Organizer", fields: [userId], references: [id])
   chatMessages          ChatMessage[]
   invitations           Invitation[]
   participants          UserConference[]

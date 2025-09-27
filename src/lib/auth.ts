@@ -7,3 +7,11 @@ export function verifyToken(token: string): {userId: number; email: string}{
     if(!secret) throw new Error("JWT secret must be provided");
     return jwt.verify(token, secret) as {userId: number; email: string};
 }
+
+export function getUserIdFromAuthHeader(authHeader: string | null) {
+    const token = authHeader?.split(' ')[1];
+    if (!token) return null;
+    const secret = process.env.JWT_SECRET!;
+    const payload = jwt.verify(token, secret) as { userId: number };
+    return payload.userId;
+}

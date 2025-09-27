@@ -1,75 +1,82 @@
-import { NextRequest, NextResponse } from 'next/server';
+import {NextRequest, NextResponse} from "next/server";
 import { prisma } from '@/lib/prisma';
-import jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto';
+import bcrypt from 'bcryptjs';
+import { getUserIdFromAuthHeader } from '@/lib/auth';
 
-export async function GET(req: NextRequest) {
-    const authHeader = req.headers.get('authorization');
-    const token = authHeader?.split(' ')[1];
-
-    if (!token) {
-        return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-    }
-
-    try {
-        const conferences = await prisma.conference.findMany({
-            select: {
-                id: true,
-                title: true,
-                description: true,
-                status: true,
-                startDate: true,
-                endDate: true,
-                link: true,
-                // participationPassword intentionally excluded
-            },
-        });
-
-        return NextResponse.json({ conferences }, { status: 200 });
-    } catch (err) {
-        console.error('GET /conference error:', err);
-        return NextResponse.json({ message: 'Unauthorized or invalid token' }, { status: 401 });
-    }
+export async function GET(){
+    const conferences = await prisma.conference.findMany({
+        select: {
+            id: true, title: true, description: true,
+            status:true, startDate: true, endDate: true, link: true
+        },
+        orderBy: {
+            id: 'desc'
+        }
+    });
+    return NextResponse.json({conferences});
 }
 
-export async function POST(req: NextRequest) {
-    try {
-        const body = await req.json();
-        const authHeader = req.headers.get('authorization');
-        const token = authHeader?.split(' ')[1];
-
-        if (!token || !process.env.JWT_SECRET) {
-            return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+export async function POST(req: NextRequest){
+    try{
+        const userId = getUserIdFromAuthHeader(req.headers.get('authorization'));
+        if(!userId){
+            return NextResponse.json({message: "Unauthorized"}, {status: 401});
         }
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET) as { userId: number };
+        const body = await req.json();
+        const {
+            title,
+            description,
+            startDate,
+            endDate,
+            participationPassword
+        } = body ?? {};
 
-        const inputArray = Array.isArray(body) ? body : [body];
+        if(!title || typeof title !== 'string'){
+            return NextResponse.json({message: 'Title is required'}, {status: 400});
+        }
 
-        const conferences = await Promise.all(
-            inputArray.map(async (conf) => {
-                const { title, description, startDate, endDate, participationPassword } = conf;
+        let participationPasswordHash: string | null = null;
+        if(participationPassword){
+            participationPasswordHash = await bcrypt.hash(participationPassword, 10);
+        }
 
-                return prisma.conference.create({
-                    data: {
-                        title,
-                        description,
-                        startDate: startDate ? new Date(startDate) : null,
-                        endDate: endDate ? new Date(endDate) : null,
-                        status: 'SCHEDULED',
-                        link: randomUUID(),
-                        participationPassword,
-                        userId: decoded.userId,
-                    },
-                });
-            })
-        );
+        const link = randomUUID();
 
-        return NextResponse.json(Array.isArray(body) ? conferences : conferences[0], {
-            status: 201,
+        const conference = await prisma.conference.create({
+            data: {
+                title,
+                description: description ?? null,
+                startDate: startDate ? new Date(startDate) : null,
+                endDate: endDate ? new Date(endDate) : null,
+                status: 'SCHEDULED',
+                link,
+                participationPassword: participationPasswordHash,
+                userId // Owner
+            },
+            select: {
+                id: true, title: true, description: true, status: true,
+                startDate: true, endDate: true, link: true, userId: true
+            }
         });
-    } catch (error) {
-        console.error('Error creating conference:', error);
-        return NextResponse.json({ message: 'Internal Server Error' }, { status: 500 });
+
+        await prisma.userConference.upsert({
+            where: {
+                userId_conferenceId: { userId, conferenceId: conference.id }
+            },
+            update: {role: 'ORGANIZER'},
+            create: {
+                userId,
+                conferenceId: conference.id,
+                role: 'ORGANIZER'
+            }
+        });
+
+        return NextResponse.json({conference}, {status: 201});
+    }
+    catch(err){
+        console.error('POST /api/conference error', err);
+        return NextResponse.json({message: 'Internal Server Error'}, {status: 500});
     }
 }
