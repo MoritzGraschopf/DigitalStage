@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import jwt from 'jsonwebtoken';
 import {getUserIdFromAuthHeader} from "@/lib/auth";
 
 export async function GET(
@@ -9,9 +8,8 @@ export async function GET(
 ){
     try{
         const userId =  getUserIdFromAuthHeader(req.headers.get('authorization'));
-        if(!userId){
+        if(!userId)
             return NextResponse.json({message: 'Unauthorized'}, {status: 401});
-        }
 
         const {link} = params;
         if(!link){
@@ -25,10 +23,10 @@ export async function GET(
                 title: true,
                 description: true,
                 status: true,
-                startDate: true,
+                startAt: true,
                 endDate: true,
                 link: true,
-                userId: true,
+                organizerId: true,
                 chatMessages: {
                     orderBy: { id: 'asc' },
                     select: {
@@ -37,7 +35,7 @@ export async function GET(
                         userId: true,
                         conferenceId: true,
                         user: {
-                            select: { id: true, name: true, email: true }
+                            select: { id: true, firstName: true, lastName:true, email: true }
                         }
                     }
                 },
@@ -45,7 +43,7 @@ export async function GET(
                     select: {
                         role: true,
                         userId: true,
-                        user: { select: { id: true, name: true, email: true } }
+                        user: { select: { id: true, firstName: true, lastName: true, email: true } }
                     }
                 }
             }
@@ -80,14 +78,14 @@ export async function DELETE(
 
         const conference = await prisma.conference.findUnique({
             where: {link},
-            select: {id: true, userId: true}
+            select: {id: true, organizerId: true}
         });
 
         if(!conference){
             return NextResponse.json({message: 'Not found'}, {status: 404});
         }
 
-        if(conference.userId !== userId){
+        if(conference.organizerId !== userId){
             return NextResponse.json({message: 'forbitten'}, {status: 403})
         }
 

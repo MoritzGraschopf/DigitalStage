@@ -13,10 +13,15 @@ const registerSchema = z.object({
     email: z.email({
         error: "Invalide Email Addresse",
     }),
-    name: z.string().min(1, {
-        error: "Name muss ausgefüllt werden",
+    firstName: z.string().min(1, {
+        error: "Vorname muss ausgefüllt werden",
     }).max(30, {
-        error: "Name darf maximal 30 Zeichen lang sein",
+        error: "Vorname darf maximal 30 Zeichen lang sein",
+    }),
+    lastName: z.string().min(1, {
+        error: "Nachname muss ausgefüllt werden",
+    }).max(30, {
+        error: "Nachname darf maximal 30 Zeichen lang sein",
     }),
     password: z.string().min(8, {
         error: "Passwort muss mindestens 8 Zeichen lang sein",
@@ -34,14 +39,15 @@ export default function RegisterForm() {
         resolver: zodResolver(registerSchema),
         defaultValues: {
             email: "",
-            name: "",
+            firstName: "",
+            lastName: "",
             password: "",
         },
     });
 
     async function onSubmit(values: z.infer<typeof registerSchema>) {
         try {
-            await register(values.email, values.name, values.password, redirect)
+            await register(values.email, values.firstName, values.lastName, values.password, redirect)
             console.log('Erfolgreich registriert!');
         } catch (error) {
             if (error instanceof Error) {
@@ -75,12 +81,28 @@ export default function RegisterForm() {
                 />
                 <FormField
                     control={form.control}
-                    name="name"
+                    firstName="firstName"
                     render={({ field }) => (
                         <FormItem>
-                            <FormLabel>Name</FormLabel>
+                            <FormLabel>Firstname</FormLabel>
                             <FormControl>
-                                <Input placeholder="Jacob Toifl" {...field} />
+                                <Input placeholder="Jacob" {...field} />
+                            </FormControl>
+                            <FormDescription>
+                                Name der den anderen Benutzern angezeigt wird
+                            </FormDescription>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
+                <FormField
+                    control={form.control}
+                    lastName="lastName"
+                    render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Lastname</FormLabel>
+                            <FormControl>
+                                <Input placeholder="Toifl" {...field} />
                             </FormControl>
                             <FormDescription>
                                 Name der den anderen Benutzern angezeigt wird

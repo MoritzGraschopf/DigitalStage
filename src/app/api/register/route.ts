@@ -5,9 +5,9 @@ import jwt from "jsonwebtoken";
 
 export async function POST(req: NextRequest){
     const body = await req.json();
-    const {email, password, name} = body;
+    const {email, password, firstName, lastName} = body;
 
-    if (!email || !password || !name) {
+    if (!email || !password || !firstName || !lastName) {
         return NextResponse.json({ message: 'Name, email, and password are required' }, { status: 400 });
     }
 
@@ -21,9 +21,10 @@ export async function POST(req: NextRequest){
 
         const newUser = await prisma.user.create({
             data: {
-                name,
                 email,
                 passwordHash: hashedPassword,
+                firstName,
+                lastName
             },
         });
 
