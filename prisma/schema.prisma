@@ -27,29 +27,33 @@ enum Role {
 }
 
 model User {
-  id             Int              @id @default(autoincrement())
-  name           String           @default("")
-  email          String           @unique
-  passwordHash   String
-  conferences    Conference[]     @relation("Organizer")
-  chatMessages   ChatMessage[]
-  participations UserConference[]
+  id           Int    @id @default(autoincrement())
+  firstName    String @default("")
+  lastName     String @default("")
+  email        String @unique
+  passwordHash String
+
+  organizedConferences Conference[]     @relation("Organizer")
+  chatMessages         ChatMessage[]
+  participations       UserConference[]
 }
 
 model Conference {
-  id                    Int              @id @default(autoincrement())
-  title                 String
-  description           String?
-  startDate             DateTime?
-  endDate               DateTime?
-  status                ConferenceStatus @default(SCHEDULED)
-  link                  String           @unique
-  participationPassword String?
-  userId                Int
-  user                  User             @relation("Organizer", fields: [userId], references: [id])
-  chatMessages          ChatMessage[]
-  invitations           Invitation[]
-  participants          UserConference[]
+  id          Int              @id @default(autoincrement())
+  title       String
+  description String?
+  startAt     DateTime?
+  endDate     DateTime?
+  status      ConferenceStatus @default(SCHEDULED)
+  link        String           @unique
+  organizerId Int
+  Organizer   User             @relation("Organizer", fields: [organizerId], references: [id], onDelete: Cascade)
+
+  chatMessages ChatMessage[]
+  participants UserConference[]
+
+  @@index([organizerId])
+  @@index([status])
 }
 
 model ChatMessage {
@@ -61,14 +65,6 @@ model ChatMessage {
   conference   Conference @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
 }
 
-model Invitation {
-  id           Int              @id @default(autoincrement())
-  email        String
-  status       InvitationStatus
-  conferenceId Int
-  conference   Conference       @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
-}
-
 model UserConference {
   userId       Int
   conferenceId Int
@@ -78,4 +74,5 @@ model UserConference {
   conference Conference @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
 
   @@id([userId, conferenceId])
+  @@index([conferenceId])
 }
