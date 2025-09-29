@@ -50,7 +50,7 @@ export async function GET(
         });
 
         if(!conference){
-            return NextResponse.json({message: 'Conference not found'}, {status: 404})
+            return NextResponse.json({message: 'conference not found'}, {status: 404})
         }
 
         return NextResponse.json(conference, {status: 200})

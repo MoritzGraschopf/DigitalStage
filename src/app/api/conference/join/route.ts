@@ -28,7 +28,7 @@ export async function POST(
         });
 
         if(!conf)
-            return NextResponse.json({message: 'Conference not found'}, {status: 404});
+            return NextResponse.json({message: 'conference not found'}, {status: 404});
 
         if(role === 'ORGANIZER'){
             if(conf.organizerId != auth.userId)
