@@ -53,9 +53,9 @@ export default function Home() {
                         <CardHeader>
                             <CardTitle>{conference.title}</CardTitle>
                             <CardDescription>
-                                {conference.startDate && conference.endDate ? (
+                                {conference.startAt && conference.endDate ? (
                                     <>
-                                        Von {new Date(conference.startDate).toLocaleDateString("de-DE")} bis{" "}
+                                        Von {new Date(conference.startAt).toLocaleDateString("de-DE")} bis{" "}
                                         {new Date(conference.endDate).toLocaleDateString("de-DE")}
                                     </>
                                 ) : (
@@ -112,9 +112,9 @@ export default function Home() {
                             <CardHeader>
                                 <CardTitle>{conference.title}</CardTitle>
                                 <CardDescription>
-                                    {conference.startDate && conference.endDate ? (
+                                    {conference.startAt && conference.endDate ? (
                                         <>
-                                            Von {new Date(conference.startDate).toLocaleDateString("de-DE")} bis{" "}
+                                            Von {new Date(conference.startAt).toLocaleDateString("de-DE")} bis{" "}
                                             {new Date(conference.endDate).toLocaleDateString("de-DE")}
                                         </>
                                     ) : (
