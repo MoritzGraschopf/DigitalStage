@@ -12,6 +12,7 @@ import {cn} from "@/lib/utils";
 import {ChatMessage, Conference, User} from "@prisma/client";
 import {useAuth} from "@/context/AuthContext";
 import {ScrollArea} from "@/components/ui/scroll-area";
+import {useWS} from "@/context/WebSocketContext";
 
 type ChatMessageWithUser = ChatMessage & { user: User }
 
@@ -22,7 +23,7 @@ const messageSchema = z.object({
 export default function ConferenceChat({conference, disabled}: { conference: Conference, disabled: boolean }) {
     const {user, token} = useAuth()
     const [messages, setMessages] = useState<ChatMessageWithUser[]>([])
-    const [ws, setWs] = useState<WebSocket | null>(null)
+    const ws = useWS()
 
     // --- Scroll handling (IntersectionObserver) ---
     const viewportRef = useRef<HTMLDivElement | null>(null)
@@ -78,25 +79,6 @@ export default function ConferenceChat({conference, disabled}: { conference: Con
 
     useEffect(() => { fetchMessages() }, [fetchMessages])
 
-    useEffect(() => {
-        const socket = new WebSocket(process.env.NEXT_PUBLIC_WS_URL!);
-        socket.onmessage = (event) => {
-            const msg = JSON.parse(event.data);
-            if (msg.type === "chatMessage") {
-                setMessages((prev) => [...prev, msg]);
-            }
-        };
-        setWs(socket);
-        return () => socket.close();
-    }, []);
-
-    useEffect(() => {
-        if (!ws) return;
-        ws.onopen = () => {
-            ws.send(JSON.stringify({ type: "init", conferenceId: conference.id }));
-        };
-    }, [ws, conference.id]);
-
     // Bei neuen Messages NUR auto-scrollen, wenn man vorher unten war oder selbst geschrieben hat
     useEffect(() => {
         if (messages.length === 0) return
@@ -105,6 +87,10 @@ export default function ConferenceChat({conference, disabled}: { conference: Con
         if (wasAtBottomRef.current || iWrote) scrollToBottom("auto")
         else setUnreadCount((n) => n + 1)
     }, [messages, user?.id])
+
+    useEffect(() => {
+        ws.send({type: "init", userId: user?.id, inConference: true})
+    }, [ws, user?.id]);
 
     const form = useForm<z.infer<typeof messageSchema>>({
         resolver: zodResolver(messageSchema),

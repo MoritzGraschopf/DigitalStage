@@ -4,6 +4,9 @@ import { createServer } from 'http';
 const server = createServer();
 const wss = new WebSocketServer({ server });
 
+const inConference = new Map();
+const notInConference = new Map();
+
 wss.on('connection', (ws) => {
     console.log('🔌 Client connected');
 
@@ -16,35 +19,22 @@ wss.on('connection', (ws) => {
             return;
         }
 
-
-        // Initiale Verbindung → conferenceId speichern
         if (msg.type === 'init') {
-            ws.conferenceId = msg.conferenceId;
-            console.log(`🎯 Client joined conference ${ws.conferenceId}`);
+            if (msg.inConference) {
+                if (notInConference.has(msg.userId)) notInConference.delete(msg.userId);
+                inConference.set(msg.userId, msg.conferenceId);
+            } else {
+                if (inConference.has(msg.userId)) inConference.delete(msg.userId);
+                notInConference.set(msg.userId, msg.conferenceId);
+            }
+            console.log(msg)
             return;
         }
 
-        // Neue Chatnachricht
-        if (msg.type === 'chatMessage') {
-            if (!msg.message || !msg.userId || !ws.conferenceId || !msg.conferenceId || !msg.name) return;
-            console.log(msg)
-            // Nur an Clients mit derselben conferenceId senden
+        if (msg.type === 'conference') {
             wss.clients.forEach((client) => {
-                if (
-                    client.readyState === 1 && // WebSocket.OPEN === 1
-                    client.conferenceId === ws.conferenceId
-                ) {
-                    client.send(
-                        JSON.stringify({
-                            type: "chatMessage",
-                            message: msg.message,
-                            user: {
-                                id: msg.userId,
-                                name: msg.name,
-                            }})
-                    );
-                }
-            });
+                client.
+            })
         }
     });
 });

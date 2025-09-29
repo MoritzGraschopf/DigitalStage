@@ -9,12 +9,18 @@ import {useAuth} from "@/context/AuthContext";
 import {Check, Copy} from "lucide-react";
 import {Tooltip, TooltipContent, TooltipTrigger} from "@/components/ui/tooltip";
 import {Separator} from "@/components/ui/separator";
+import {useWS} from "@/context/WebSocketContext";
 
 export default function Home() {
     const [conferences, setConferences] = useState<Conference[]>([]);
-    const {token} = useAuth();
+    const {user, token} = useAuth();
     const [copiedLinkId, setCopiedLinkId] = useState<number | null>(null);
     const [showEnded, setShowEnded] = useState(false);
+    const ws = useWS()
+
+    useEffect(() => {
+        ws.send({type: "init", userId: user?.id, inConference: false})
+    }, [ws, user?.id]);
 
     useEffect(() => {
         const fetchConferences = async () => {
