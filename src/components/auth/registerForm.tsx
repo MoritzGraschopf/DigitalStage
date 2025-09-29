@@ -81,7 +81,7 @@ export default function RegisterForm() {
                 />
                 <FormField
                     control={form.control}
-                    firstName="firstName"
+                    name="firstName"
                     render={({ field }) => (
                         <FormItem>
                             <FormLabel>Firstname</FormLabel>
@@ -97,7 +97,7 @@ export default function RegisterForm() {
                 />
                 <FormField
                     control={form.control}
-                    lastName="lastName"
+                    name="lastName"
                     render={({ field }) => (
                         <FormItem>
                             <FormLabel>Lastname</FormLabel>
