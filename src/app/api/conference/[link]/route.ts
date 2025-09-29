@@ -56,8 +56,7 @@ export async function GET(
         return NextResponse.json(conference, {status: 200})
     }
     catch(err){
-        console.error('GET /api/conferences/[link] error', err);
-        return NextResponse.json({message: 'Internal server error'}, {status: 500});
+        return NextResponse.json({message: 'Internal server error', err}, {status: 500});
     }
 }
 
