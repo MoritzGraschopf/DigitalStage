@@ -1,12 +1,12 @@
 /*
   Warnings:
 
-  - You are about to drop the column `participationPassword` on the `Conference` table. All the data in the column will be lost.
-  - You are about to drop the column `startDate` on the `Conference` table. All the data in the column will be lost.
-  - You are about to drop the column `userId` on the `Conference` table. All the data in the column will be lost.
+  - You are about to drop the column `participationPassword` on the `conference` table. All the data in the column will be lost.
+  - You are about to drop the column `startDate` on the `conference` table. All the data in the column will be lost.
+  - You are about to drop the column `userId` on the `conference` table. All the data in the column will be lost.
   - You are about to drop the column `name` on the `User` table. All the data in the column will be lost.
   - You are about to drop the `Invitation` table. If the table is not empty, all the data it contains will be lost.
-  - Added the required column `organizerId` to the `Conference` table without a default value. This is not possible if the table is not empty.
+  - Added the required column `organizerId` to the `conference` table without a default value. This is not possible if the table is not empty.
 
 */
 -- DropForeignKey

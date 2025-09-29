@@ -15,7 +15,7 @@ type AuthContextType = {
     fetchUser: () => Promise<void>;
     login: (email: string, password: string, redirect: string) => Promise<void>;
     logout: () => void;
-    register: (email: string, name: string, password: string, redirect: string) => Promise<void>;
+    register: (email: string, firstName: string, lastName:string, password: string, redirect: string) => Promise<void>;
     fetchWithAuth: <T>(url: string, options?: RequestInit) => Promise<T>;
     isAuthenticated: boolean;
     loading: boolean;
