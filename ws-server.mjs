@@ -27,13 +27,29 @@ wss.on('connection', (ws) => {
                 if (inConference.has(msg.userId)) inConference.delete(msg.userId);
                 notInConference.set(msg.userId, msg.conferenceId);
             }
+            ws.userId = msg.userId;
             console.log(msg)
             return;
         }
 
         if (msg.type === 'conference') {
+            console.log(msg)
             wss.clients.forEach((client) => {
-                client.
+                if(!client.userId) return
+                if (notInConference.has(client.userId)) {
+                    client.send(JSON.stringify({
+                        type: 'server:conference',
+                        id: msg.id,
+                        title: msg.title,
+                        description: msg.description,
+                        startAt: msg.startAt,
+                        endDate: msg.endDate,
+                        status: msg.status,
+                        link: msg.link,
+                        organizerId: msg.organizerId,
+                        participants: msg.participants,
+                    }));
+                }
             })
         }
     });

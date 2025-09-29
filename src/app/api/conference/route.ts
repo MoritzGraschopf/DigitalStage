@@ -56,7 +56,13 @@ export async function POST(req: NextRequest){
             },
             select: {
                 id: true, title: true, description: true, status: true,
-                startAt: true, endDate: true, link: true, organizerId: true
+                startAt: true, endDate: true, link: true, organizerId: true,
+                participants: {
+                    select: {
+                        role: true,
+                        userId: true,
+                    }
+                }
             }
         });
 

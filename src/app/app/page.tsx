@@ -23,6 +23,17 @@ export default function Home() {
     }, [ws, user?.id]);
 
     useEffect(() => {
+        ws.on("server:conference", (msg) => {
+            const con = msg as Conference;
+            setConferences((prev) => {
+                // wenn schon vorhanden → nicht erneut hinzufügen
+                if (prev.some(c => c.id === con.id)) return prev;
+                return [...prev, con];
+            });
+        });
+    }, [ws]);
+
+    useEffect(() => {
         const fetchConferences = async () => {
             try {
                 const res = await fetch("/api/conference", {
