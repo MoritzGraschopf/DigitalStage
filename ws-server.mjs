@@ -33,7 +33,6 @@ wss.on('connection', (ws) => {
         }
 
         if (msg.type === 'conference') {
-            console.log(msg)
             wss.clients.forEach((client) => {
                 if(!client.userId) return
                 if (notInConference.has(client.userId)) {
@@ -49,6 +48,23 @@ wss.on('connection', (ws) => {
                         organizerId: msg.organizerId,
                         participants: msg.participants,
                     }));
+                }
+            })
+        }
+
+        if (msg.type === 'chatMessage') {
+            wss.clients.forEach((client) => {
+                if(!client.userId) return
+                if (inConference.has(client.userId) && inConference.get(client.userId) === msg.conferenceId) {
+                    client.send(JSON.stringify({
+                        type: 'server:chatMessage',
+                        id: msg.id,
+                        message: msg.message,
+                        userId: msg.userId,
+                        conferenceId: msg.conferenceId,
+                        user: msg.user,
+                    }))
+                    console.log(msg)
                 }
             })
         }

@@ -89,8 +89,20 @@ export default function ConferenceChat({conference, disabled}: { conference: Con
     }, [messages, user?.id])
 
     useEffect(() => {
-        ws.send({type: "init", userId: user?.id, inConference: true})
-    }, [ws, user?.id]);
+        ws.send({type: "init", userId: user?.id, inConference: true, conferenceId: conference.id})
+    }, [ws, user?.id, conference.id]);
+
+    useEffect(() => {
+        //TODO: Wenn ein User eine Nachricht schickt, wird diese einmal im anderen Browser angezeigt. Wenn man dann vom anderen Browser eine schickt geht es nicht mehr.
+        ws.on("server:chatMessage", (message) => {
+            console.log("server:chatMessage", message)
+            const formatMessage = message as ChatMessageWithUser
+            setMessages((prev) => {
+                if (prev.some(c => c.id === formatMessage.id)) return prev;
+                return [...prev, formatMessage]
+            })
+        })
+    }, [ws]);
 
     const form = useForm<z.infer<typeof messageSchema>>({
         resolver: zodResolver(messageSchema),
@@ -106,16 +118,19 @@ export default function ConferenceChat({conference, disabled}: { conference: Con
             },
             body: JSON.stringify({ message: values.message })
         })
-        if (ws) {
-            ws.send(JSON.stringify({
-                type: "chatMessage",
-                message: values.message,
-                userId: user?.id,
-                conferenceId: conference.id,
-                name: user?.name
-            }))
-        }
-        await fetchMessages()
+
+        ws.send({
+            type: "chatMessage",
+            message: values.message,
+            userId: user?.id,
+            conferenceId: conference.id,
+            user: {
+                firstName: user?.firstName,
+                lastName: user?.lastName
+            }
+        })
+
+        // await fetchMessages()
         form.reset()
         // eigene Nachricht -> sofort nach unten
         scrollToBottom()
@@ -156,10 +171,10 @@ export default function ConferenceChat({conference, disabled}: { conference: Con
                                 key={index}
                                 className={cn(
                                     "p-2 bg-accent text-accent-foreground rounded-md w-max flex flex-col",
-                                    message.user?.id === user?.id ? "ml-auto text-right" : "mr-auto"
+                                    message.userId === user?.id ? "ml-auto text-right" : "mr-auto"
                                 )}
                             >
-                                <span className="text-muted-foreground text-sm">{message.user.firstName}</span>
+                                <span className="text-muted-foreground text-sm">{message.user.firstName + " " + message.user.lastName}</span>
                                 <span>{message.message}</span>
                             </div>
                         ))}
