@@ -30,9 +30,10 @@ export async function GET(req: NextRequest) {
             where: {id: userId},
             select: {
                 id: true,
-                name: true,
+                firstName: true,
+                lastName: true,
                 email: true,
-                conferences: true,
+                organizedConferences:true,
                 chatMessages: true,
                 participations: true,
             },

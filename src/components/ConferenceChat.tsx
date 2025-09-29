@@ -135,7 +135,7 @@ export default function ConferenceChat({conference, disabled}: { conference: Con
                         ${message.user.id === user?.id ? "self-end text-right" : "self-start"}`
                                 )}
                             >
-                                <span className="text-muted-foreground text-sm">{message.user.name}</span>
+                                <span className="text-muted-foreground text-sm">{message.user.firstName}</span>
                                 <span>{message.message}</span>
                             </div>
                         ))}

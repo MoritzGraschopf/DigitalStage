@@ -157,7 +157,7 @@ export default function Page({
 
                                 <div className="font-medium">Von:</div>
                                 <div
-                                    className="text-right">{!!conference.startDate ? new Date(conference.startDate).toLocaleDateString("de-DE") : "Datum nicht verfügbar"}</div>
+                                    className="text-right">{!!conference.startAt ? new Date(conference.startAt).toLocaleDateString("de-DE") : "Datum nicht verfügbar"}</div>
 
                                 <div className="font-medium">Bis:</div>
                                 <div

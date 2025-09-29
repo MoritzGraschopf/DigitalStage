@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
             },
             include: {
                 user: {
-                    select: { id: true, name: true, email: true }, // Nur relevante User-Daten einfügen
+                    select: { id: true, firstName: true, lastName:true, email: true }, // Nur relevante User-Daten einfügen
                 },
             },
         });
