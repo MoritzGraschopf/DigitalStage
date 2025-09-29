@@ -6,13 +6,15 @@ import {
     MenubarItem,
     MenubarMenu,
     MenubarSeparator,
-    MenubarShortcut,
     MenubarTrigger,
 } from "@/components/ui/menubar";
-import React, {useEffect} from "react";
+import React from "react";
 import Link from "next/link";
+import NewConferenceDialog from "@/components/NewConferenceDialog";
 
 export default function LayoutMenuBar({logout}: { logout: () => void }) {
+    const [isDialogOpen, setIsDialogOpen] = React.useState(false);
+
     const handleReload = () => {
         console.log("Neu laden triggered!");
     };
@@ -21,56 +23,44 @@ export default function LayoutMenuBar({logout}: { logout: () => void }) {
         window.location.reload();
     };
 
-    useEffect(() => {
-        const handleKeyboardShortcut = (event: KeyboardEvent) => {
-            // CMD + R (Neu laden)
-            if (event.metaKey && event.key === "r" && !event.shiftKey) {
-                event.preventDefault();
-                handleReload();
-            }
-
-            // Shift + CMD + R (Erzwinge Neu laden)
-            if (event.metaKey && event.key === "r" && event.shiftKey) {
-                event.preventDefault();
-                handleForceReload();
-            }
-        };
-
-        window.addEventListener("keydown", handleKeyboardShortcut);
-
-        // Cleanup the event listener when the component is unmounted
-        return () => {
-            window.removeEventListener("keydown", handleKeyboardShortcut);
-        };
-    }, []);
-
     return (
-        <Menubar className="m-2">
-            <MenubarMenu>
-                <MenubarTrigger>Ansicht</MenubarTrigger>
-                <MenubarContent>
-                    <MenubarItem onSelect={handleReload}>
-                        Neu laden <MenubarShortcut>⌘R</MenubarShortcut>
-                    </MenubarItem>
-                    <MenubarItem onSelect={handleForceReload}>
-                        Erzwinge Neu laden <MenubarShortcut>⇧⌘R</MenubarShortcut>
-                    </MenubarItem>
-                    <MenubarSeparator/>
-                    <MenubarItem>Vollbild umschalten</MenubarItem>
-                </MenubarContent>
-            </MenubarMenu>
-            <MenubarMenu>
-                <MenubarTrigger>Account</MenubarTrigger>
-                <MenubarContent>
-                    <MenubarItem>
-                        <Link href="/app/account">
-                            Profil
-                        </Link>
-                    </MenubarItem>
-                    <MenubarSeparator/>
-                    <MenubarItem variant="destructive" onSelect={logout}>Abmelden</MenubarItem>
-                </MenubarContent>
-            </MenubarMenu>
-        </Menubar>
+        <>
+            <Menubar className="m-2">
+                <MenubarMenu>
+                    <MenubarTrigger>Konferenz</MenubarTrigger>
+                    <MenubarContent>
+                        <MenubarItem onSelect={() => setIsDialogOpen(true)}>
+                            Konferenz erstellen
+                        </MenubarItem>
+                    </MenubarContent>
+                </MenubarMenu>
+                <MenubarMenu>
+                    <MenubarTrigger>Ansicht</MenubarTrigger>
+                    <MenubarContent>
+                        <MenubarItem onSelect={handleReload}>
+                            Neu laden
+                        </MenubarItem>
+                        <MenubarItem onSelect={handleForceReload}>
+                            Erzwinge Neu laden
+                        </MenubarItem>
+                        <MenubarSeparator/>
+                        <MenubarItem>Vollbild umschalten</MenubarItem>
+                    </MenubarContent>
+                </MenubarMenu>
+                <MenubarMenu>
+                    <MenubarTrigger>Account</MenubarTrigger>
+                    <MenubarContent>
+                        <MenubarItem>
+                            <Link href="/app/account">
+                                Profil
+                            </Link>
+                        </MenubarItem>
+                        <MenubarSeparator/>
+                        <MenubarItem variant="destructive" onSelect={logout}>Abmelden</MenubarItem>
+                    </MenubarContent>
+                </MenubarMenu>
+            </Menubar>
+            <NewConferenceDialog open={isDialogOpen} setOpen={setIsDialogOpen}/>
+        </>
     );
 }
