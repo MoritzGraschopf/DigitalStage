@@ -29,6 +29,12 @@ export default function LayoutMenuBar({logout}: { logout: () => void }) {
                 <MenubarMenu>
                     <MenubarTrigger>Konferenz</MenubarTrigger>
                     <MenubarContent>
+                        <MenubarItem asChild>
+                            <Link href="/app">
+                                Alle Konferenzen
+                            </Link>
+                        </MenubarItem>
+                        <MenubarSeparator/>
                         <MenubarItem onSelect={() => setIsDialogOpen(true)}>
                             Konferenz erstellen
                         </MenubarItem>
