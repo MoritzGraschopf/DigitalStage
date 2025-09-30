@@ -20,6 +20,7 @@ import {User} from "@prisma/client";
 import {Badge} from "@/components/ui/badge";
 import {cn} from "@/lib/utils";
 import {useAuth} from "@/context/AuthContext";
+import {useWS} from "@/context/WebSocketContext";
 
 // ---------- Utils ----------
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -32,7 +33,7 @@ const conferenceScheme = z.object({
     description: z.string().max(120, {message: "Die Beschreibung darf höchstens 120 Zeichen enthalten."}).trim().optional(),
     startAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
     endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
-    userIds: z.array(z.number().int()).max(10, { message: "Maximal 10 Teilnehmer auswählbar." }),
+    userIds: z.array(z.string()).max(10, { message: "Maximal 10 Teilnehmer auswählbar." }),
 }).refine((d) => {
     const s = new Date(d.startAt);
     const e = new Date(d.endDate);
@@ -50,6 +51,8 @@ const NewConferenceSheet: React.FC<NewConferenceSheetProps> = ({open, setOpen}) 
     const inOneHour = new Date(now.getTime() + 60 * 60 * 1000);
 
     const [users, setUsers] = React.useState<User[]>([]);
+
+    const ws = useWS()
 
     useEffect(() => {
         const fetchUsers = async () => {
@@ -77,7 +80,7 @@ const NewConferenceSheet: React.FC<NewConferenceSheetProps> = ({open, setOpen}) 
 
     const selectedIds = form.watch("userIds") ?? [];
 
-    const toggleUser = React.useCallback((id: number) => {
+    const toggleUser = React.useCallback((id: string) => {
         // eigenen User blocken
         if (user && id === user.id) {
             form.setError("userIds", {
@@ -104,13 +107,6 @@ const NewConferenceSheet: React.FC<NewConferenceSheetProps> = ({open, setOpen}) 
     }, [form, user]);
 
     async function onSubmit(values: z.infer<typeof conferenceScheme>) {
-        const o = {
-            title: values.title,
-            description: values.description,
-            startAt: values.startAt,
-            endDate: values.endDate,
-            userIds: values.userIds,
-        };
         try {
             const res = await fetch("/api/conference", {
                 method: "POST",
@@ -118,7 +114,13 @@ const NewConferenceSheet: React.FC<NewConferenceSheetProps> = ({open, setOpen}) 
                     "Content-Type": "application/json",
                     "Authorization": "Bearer " + token,
                 },
-                body: JSON.stringify(o),
+                body: JSON.stringify({
+                    title: values.title,
+                    description: values.description,
+                    startAt: values.startAt,
+                    endDate: values.endDate,
+                    userIds: values.userIds,
+                }),
             });
 
             if (!res.ok) {
@@ -134,8 +136,24 @@ const NewConferenceSheet: React.FC<NewConferenceSheetProps> = ({open, setOpen}) 
                 userIds: [],
             });
             setOpen(false);
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-expect-error
+
+            const data = await res.json();
+
+            console.log("res", data)
+            ws.send({
+                type: "conference",
+                id: data.conference.id,
+                title: data.conference.title,
+                description: data.conference.description,
+                startAt: data.conference.startAt,
+                endDate: data.conference.endDate,
+                status: data.conference.status,
+                link: data.conference.link,
+                organizerId: data.conference.organizerId,
+                participants: data.conference.participants,
+            })
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-expect-error
         } catch (e: never) {
             form.setError("title", {
                 type: "server",

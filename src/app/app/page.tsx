@@ -9,12 +9,29 @@ import {useAuth} from "@/context/AuthContext";
 import {Check, Copy} from "lucide-react";
 import {Tooltip, TooltipContent, TooltipTrigger} from "@/components/ui/tooltip";
 import {Separator} from "@/components/ui/separator";
+import {useWS} from "@/context/WebSocketContext";
 
 export default function Home() {
     const [conferences, setConferences] = useState<Conference[]>([]);
-    const {token} = useAuth();
-    const [copiedLinkId, setCopiedLinkId] = useState<number | null>(null);
+    const {user, token} = useAuth();
+    const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
     const [showEnded, setShowEnded] = useState(false);
+    const ws = useWS()
+
+    useEffect(() => {
+        ws.send({type: "init", userId: user?.id, inConference: false})
+    }, [ws, user?.id]);
+
+    useEffect(() => {
+        ws.on("server:conference", (msg) => {
+            const con = msg as Conference;
+            setConferences((prev) => {
+                // wenn schon vorhanden → nicht erneut hinzufügen
+                if (prev.some(c => c.id === con.id)) return prev;
+                return [...prev, con];
+            });
+        });
+    }, [ws]);
 
     useEffect(() => {
         const fetchConferences = async () => {
@@ -35,7 +52,7 @@ export default function Home() {
         fetchConferences().then();
     }, [token]);
 
-    const handleCopy = async (link: string, id: number) => {
+    const handleCopy = async (link: string, id: string) => {
         try {
             await navigator.clipboard.writeText("http://localhost:3000/app/" + link);
             setCopiedLinkId(id);
