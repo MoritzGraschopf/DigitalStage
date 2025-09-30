@@ -7,7 +7,11 @@ export async function GET(){
     const conferences = await prisma.conference.findMany({
         select: {
             id: true, title: true, description: true,
-            status:true, startAt: true, endDate: true, link: true
+            status:true, startAt: true, endDate: true, link: true,
+            organizerId: true,                // <-- WICHTIG
+            participants: {                   // <-- WICHTIG
+                select: { role: true, userId: true }
+            },
         },
         orderBy: {
             id: 'desc'
