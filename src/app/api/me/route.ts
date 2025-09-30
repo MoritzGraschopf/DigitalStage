@@ -1,6 +1,6 @@
 import {NextRequest, NextResponse} from "next/server";
-import {prisma} from "@/lib/prisma"; // Prisma korrekt importieren
-import {verifyToken} from "@/lib/auth"; // Verifizierungsfunktion aus deiner auth.ts
+import {prisma} from "@/lib/prisma";
+import {verifyToken} from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
     try {
