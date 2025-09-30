@@ -9,7 +9,7 @@ export default function AccountCard() {
     return (
         <Card className="w-90">
             <CardHeader>
-                <CardTitle>{user?.name}</CardTitle>
+                <CardTitle>{user?.firstName + " " + user?.lastName}</CardTitle>
                 <CardDescription>
                     {user?.email}
                 </CardDescription>

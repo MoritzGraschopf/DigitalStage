@@ -33,7 +33,7 @@ const conferenceScheme = z.object({
     description: z.string().max(120, {message: "Die Beschreibung darf höchstens 120 Zeichen enthalten."}).trim().optional(),
     startAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
     endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
-    userIds: z.array(z.number().int()).max(10, { message: "Maximal 10 Teilnehmer auswählbar." }),
+    userIds: z.array(z.string()).max(10, { message: "Maximal 10 Teilnehmer auswählbar." }),
 }).refine((d) => {
     const s = new Date(d.startAt);
     const e = new Date(d.endDate);
@@ -80,7 +80,7 @@ const NewConferenceSheet: React.FC<NewConferenceSheetProps> = ({open, setOpen}) 
 
     const selectedIds = form.watch("userIds") ?? [];
 
-    const toggleUser = React.useCallback((id: number) => {
+    const toggleUser = React.useCallback((id: string) => {
         // eigenen User blocken
         if (user && id === user.id) {
             form.setError("userIds", {

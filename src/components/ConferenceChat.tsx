@@ -110,7 +110,7 @@ export default function ConferenceChat({conference, disabled}: { conference: Con
     })
 
     async function onSubmit(values: z.infer<typeof messageSchema>) {
-        await fetch(`/api/chatMessage?conferenceId=${conference.id}`, {
+        const res = await fetch(`/api/chatMessage?conferenceId=${conference.id}`, {
             method: "POST",
             headers: {
                 "Authorization": "Bearer " + token,
@@ -119,8 +119,11 @@ export default function ConferenceChat({conference, disabled}: { conference: Con
             body: JSON.stringify({ message: values.message })
         })
 
+        const data = await res.json()
+
         ws.send({
             type: "chatMessage",
+            id: data.chatMessage.id,
             message: values.message,
             userId: user?.id,
             conferenceId: conference.id,

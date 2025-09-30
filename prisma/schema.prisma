@@ -27,7 +27,7 @@ enum Role {
 }
 
 model User {
-  id           Int    @id @default(autoincrement())
+  id           String @id @default(uuid())
   firstName    String @default("")
   lastName     String @default("")
   email        String @unique
@@ -39,14 +39,14 @@ model User {
 }
 
 model Conference {
-  id          Int              @id @default(autoincrement())
+  id          String           @id @default(uuid())
   title       String
   description String?
   startAt     DateTime?
   endDate     DateTime?
   status      ConferenceStatus @default(SCHEDULED)
   link        String           @unique
-  organizerId Int
+  organizerId String
   Organizer   User             @relation("Organizer", fields: [organizerId], references: [id], onDelete: Cascade)
 
   chatMessages ChatMessage[]
@@ -57,17 +57,17 @@ model Conference {
 }
 
 model ChatMessage {
-  id           Int        @id @default(autoincrement())
+  id           String     @id @default(uuid())
   message      String
-  userId       Int
-  conferenceId Int
+  userId       String
+  conferenceId String
   user         User       @relation(fields: [userId], references: [id])
   conference   Conference @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
 }
 
 model UserConference {
-  userId       Int
-  conferenceId Int
+  userId       String
+  conferenceId String
   role         Role
 
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)

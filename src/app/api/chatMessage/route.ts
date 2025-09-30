@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
         // Lade nur die Nachrichten (`chatMessages`) der Konferenz mit der entsprechenden ID
         const chatMessages = await prisma.chatMessage.findMany({
             where: {
-                conferenceId: parseInt(conferenceId),
+                conferenceId,
             },
             include: {
                 user: {
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     try {
         // Decode and verify the JWT using the secret
         const secret = process.env.JWT_SECRET!;
-        const decodedToken = jwt.verify(token, secret) as { userId: number };
+        const decodedToken = jwt.verify(token, secret) as { userId: string };
 
         // Get the request body to extract chat message
         const body = await req.json();
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
         const chatMessage = await prisma.chatMessage.create({
             data: {
                 message: message,
-                conferenceId: parseInt(conferenceId),
+                conferenceId,
                 userId: decodedToken.userId, // User ID from the decoded JWT
             }
         });

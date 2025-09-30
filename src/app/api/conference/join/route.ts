@@ -5,8 +5,7 @@ import jwt from 'jsonwebtoken';
 function getUserFromAuth(req: NextRequest) {
     const token = req.headers.get('authorization')?.split(' ')[1];
     if (!token) return null;
-    const payload = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number; email: string };
-    return payload;
+    return jwt.verify(token, process.env.JWT_SECRET!) as { userId: string; email: string };
 }
 
 export async function POST(

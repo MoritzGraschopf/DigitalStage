@@ -14,7 +14,7 @@ import {useWS} from "@/context/WebSocketContext";
 export default function Home() {
     const [conferences, setConferences] = useState<Conference[]>([]);
     const {user, token} = useAuth();
-    const [copiedLinkId, setCopiedLinkId] = useState<number | null>(null);
+    const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
     const [showEnded, setShowEnded] = useState(false);
     const ws = useWS()
 
@@ -52,7 +52,7 @@ export default function Home() {
         fetchConferences().then();
     }, [token]);
 
-    const handleCopy = async (link: string, id: number) => {
+    const handleCopy = async (link: string, id: string) => {
         try {
             await navigator.clipboard.writeText("http://localhost:3000/app/" + link);
             setCopiedLinkId(id);
