@@ -12,7 +12,7 @@ import React from "react";
 import Link from "next/link";
 import NewConferenceDialog from "@/components/NewConferenceDialog";
 
-export default function LayoutMenuBar({logout}: { logout: () => void }) {
+export default function LayoutMenuBar({logoutAction}: { logoutAction: () => void }) {
     const [isDialogOpen, setIsDialogOpen] = React.useState(false);
 
     const handleReload = () => {
@@ -62,7 +62,7 @@ export default function LayoutMenuBar({logout}: { logout: () => void }) {
                             </Link>
                         </MenubarItem>
                         <MenubarSeparator/>
-                        <MenubarItem variant="destructive" onSelect={logout}>Abmelden</MenubarItem>
+                        <MenubarItem variant="destructive" onSelect={logoutAction}>Abmelden</MenubarItem>
                     </MenubarContent>
                 </MenubarMenu>
             </Menubar>

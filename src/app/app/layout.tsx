@@ -27,7 +27,7 @@ export default function AppLayout({
         <LoaderCircle className="animate-spin" />
     </div> : (
         <>
-            <LayoutMenuBar logout={logout} />
+            <LayoutMenuBar logoutAction={logout} />
             <main className="h-full">
                 {children}
             </main>
