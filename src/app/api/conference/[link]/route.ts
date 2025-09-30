@@ -4,14 +4,18 @@ import {getUserIdFromAuthHeader} from "@/lib/auth";
 
 export async function GET(
     req: NextRequest,
-    {params }: {params: {link: string}}
+    {
+        params
+    }: {
+        params: Promise<{link: string}>
+    }
 ){
     try{
         const userId =  getUserIdFromAuthHeader(req.headers.get('authorization'));
         if(!userId)
             return NextResponse.json({message: 'Unauthorized'}, {status: 401});
 
-        const {link} = params;
+        const {link} = await params;
         if(!link){
             return NextResponse.json({message: 'Invalid conference link'}, {status: 400})
         }
@@ -63,7 +67,11 @@ export async function GET(
 
 export async function DELETE(
     req: NextRequest,
-    {params}: {params: {link: string}}
+    {
+        params
+    }: {
+        params: Promise<{link: string}>
+    }
 ){
     try{
         const userId = getUserIdFromAuthHeader(req.headers.get('authorization'));
@@ -71,7 +79,7 @@ export async function DELETE(
             return NextResponse.json({message: 'Unauthorized'}, {status: 401});
         }
 
-        const {link} = params;
+        const {link} = await params;
         if(!link){
             return NextResponse.json({message: 'Invalid conference link'}, {status: 400});
         }
