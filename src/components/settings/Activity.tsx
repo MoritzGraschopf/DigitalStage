@@ -6,12 +6,14 @@ import {Conference} from "@prisma/client";
 import {useAuth} from "@/context/AuthContext";
 import Link from "next/link";
 import {Button} from "@/components/ui/button";
+import {useWS} from "@/context/WebSocketContext";
 
 type ConferenceWithParticipants = Conference & { participants: { role: string, userId: string }[] };
 
 const ActivityPage: React.FC = () => {
     const { user, token } = useAuth();
     const [conferences, setConferences] = useState<ConferenceWithParticipants[]>([])
+    const ws = useWS()
 
     const { mine, participating, ended } = useMemo(() => {
         let mine: ConferenceWithParticipants[] = [];
@@ -54,6 +56,21 @@ const ActivityPage: React.FC = () => {
         fetchConferences()
     }, [token])
 
+    useEffect(() => {
+        ws.on("server:conference", (msg) => {
+            const con = msg as ConferenceWithParticipants;
+            setConferences((prev) => {
+                // wenn schon vorhanden → nicht erneut hinzufügen
+                if (prev.some(c => c.id === con.id)) return prev;
+                return [...prev, con];
+            });
+        });
+    }, [ws]);
+
+    useEffect(() => {
+        ws.send({type: "init", userId: user?.id, inConference: false})
+    }, [ws, user?.id]);
+
     return (
         <div className="p-6">
             <h1 className="text-lg font-medium mb-4">Aktivität</h1>
@@ -67,7 +84,7 @@ const ActivityPage: React.FC = () => {
                         <p className="text-muted-foreground text-sm italic">Keine bevorstehenden Konferenzen organisiert</p>
                     ) : mine.map((conference) => (
                         <Button key={conference.id} variant="outline" size="sm" className="text-sm" asChild>
-                            <Link href={conference.link}>
+                            <Link href={"/app/" + conference.link}>
                                 {conference.title}
                             </Link>
                         </Button>
@@ -84,7 +101,7 @@ const ActivityPage: React.FC = () => {
                         <p className="text-muted-foreground text-sm italic">Keine bevorstehenden Teilnahmen</p>
                     ) : participating.map((conference) => (
                         <Button key={conference.id} variant="outline" size="sm" className="text-sm" asChild>
-                            <Link href={conference.link}>
+                            <Link href={"/app/" + conference.link}>
                                 {conference.title}
                             </Link>
                         </Button>
@@ -101,7 +118,7 @@ const ActivityPage: React.FC = () => {
                         <p className="text-muted-foreground text-sm italic">Keine Konferenz organiesiert oder teilgehabt</p>
                     ) : ended.map((conference) => (
                         <Button key={conference.id} variant="outline" size="sm" className="text-sm" asChild>
-                            <Link href={conference.link}>
+                            <Link href={"/app/" + conference.link}>
                                 {conference.title}
                             </Link>
                         </Button>

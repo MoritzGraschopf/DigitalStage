@@ -93,7 +93,6 @@ export default function ConferenceChat({conference, disabled}: { conference: Con
     }, [ws, user?.id, conference.id]);
 
     useEffect(() => {
-        //TODO: Wenn ein User eine Nachricht schickt, wird diese einmal im anderen Browser angezeigt. Wenn man dann vom anderen Browser eine schickt geht es nicht mehr.
         ws.on("server:chatMessage", (message) => {
             console.log("server:chatMessage", message)
             const formatMessage = message as ChatMessageWithUser
