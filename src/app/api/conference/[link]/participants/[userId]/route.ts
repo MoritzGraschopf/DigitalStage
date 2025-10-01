@@ -4,15 +4,17 @@ import { getUserIdFromAuthHeader } from "@/lib/auth";
 
 export async function DELETE(
     req: NextRequest,
-    {params}: {params: {link: string; userId: string}}
+    {params}: {params: Promise<{link: string; userId: string}>}
 ){
     try{
         const organizerId = getUserIdFromAuthHeader(req.headers.get('authorization'));
         if(!organizerId)
             return NextResponse.json({message: 'Unauthorized'}, {status: 401});
 
+        const {link, userId} = await params;
+
         const conf = await prisma.conference.findUnique({
-            where: {link: params.link},
+            where: {link},
             select: {id: true, organizerId: true}
         });
 
@@ -21,16 +23,11 @@ export async function DELETE(
         if(conf.organizerId !== organizerId)
             return NextResponse.json({message: 'Forbidden (organizer only)'}, {status: 403});
 
-        const targetUserId = Number(params.userId);
-
-        if(!Number.isInteger(targetUserId))
-            return NextResponse.json({message: 'Invalid user id'}, {status: 404});
-
-        if(targetUserId === organizerId)
+        if(userId === organizerId)
             return NextResponse.json({message: 'Cannot remove organizer'}, {status: 400});
 
         const existing = await prisma.userConference.findUnique({
-           where: {userId_conferenceId: {userId: targetUserId, conferenceId: conf.id}},
+           where: {userId_conferenceId: {userId, conferenceId: conf.id}},
            select: {userId: true}
         });
 
@@ -38,7 +35,7 @@ export async function DELETE(
             return NextResponse.json({message: 'Participation not found'});
 
         await prisma.userConference.delete({
-            where: {userId_conferenceId: {userId: targetUserId, conferenceId: conf.id}}
+            where: {userId_conferenceId: {userId, conferenceId: conf.id}}
         });
 
         return NextResponse.json({message: 'Removed'}, {status: 200});
