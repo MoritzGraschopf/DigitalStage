@@ -36,7 +36,7 @@ export default function Page({params}: { params: Promise<{ link: string }> }) {
     const [organizer, setOrganizer] = useState<User | null>(null);
     const [showText, setShowText] = useState(false);
     const [copied, setCopied] = useState(false);
-    const {fetchWithAuth, user, token} = useAuth();
+    const {fetchWithAuth, user} = useAuth();
     const {link} = use(params);
 
     const [commandOpen, setCommandOpen] = useState(false);
@@ -150,14 +150,10 @@ export default function Page({params}: { params: Promise<{ link: string }> }) {
                 setCommandOpen(false);
                 return;
             }
-            await fetch(`/api/conference/${conference.id}/participants`, {
+            await fetchWithAuth(`/api/conference/${conference.link}/participants`, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: "Bearer " + token,
-                },
                 body: JSON.stringify({userIds: selectedUserIds}),
-            });
+            })
             setSelectedUserIds([]);
             setCommandOpen(false);
         } catch (e) {
