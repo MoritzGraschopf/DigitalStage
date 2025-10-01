@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/command";
 import {Checkbox} from "@/components/ui/checkbox";
 import {Badge} from "@/components/ui/badge";
+import {useWS} from "@/context/WebSocketContext";
 
 const mapStatus = (status: string): string => {
     const statusMap: Record<string, string> = {
@@ -42,6 +43,8 @@ export default function Page({params}: { params: Promise<{ link: string }> }) {
     const [commandOpen, setCommandOpen] = useState(false);
     const [allUsers, setAllUsers] = useState<User[]>([]);
     const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+
+    const ws = useWS();
 
     const handleCopy = async () => {
         try {
@@ -71,7 +74,13 @@ export default function Page({params}: { params: Promise<{ link: string }> }) {
             }
         };
         fetchConference();
-    }, [link, fetchWithAuth]);
+
+        ws.on("server:ConferenceParticipantsAdded", (msg) => {
+            const formattedMsg = msg as { conferenceId: string; };
+            if (formattedMsg.conferenceId === conference?.id)
+                fetchConference();
+        })
+    }, [conference, ws, link, fetchWithAuth]);
 
     // Users laden
     useEffect(() => {
@@ -154,6 +163,12 @@ export default function Page({params}: { params: Promise<{ link: string }> }) {
                 method: "POST",
                 body: JSON.stringify({userIds: selectedUserIds}),
             })
+
+            ws.send({
+                type: "ConferenceParticipantsAdded",
+                conferenceId: conference.id,
+            })
+
             setSelectedUserIds([]);
             setCommandOpen(false);
         } catch (e) {
