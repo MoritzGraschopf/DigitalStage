@@ -152,6 +152,15 @@ const NewConferenceSheet: React.FC<NewConferenceSheetProps> = ({open, setOpen}) 
                 organizerId: data.conference.organizerId,
                 participants: data.conference.participants,
             })
+
+            ws?.send({
+                type: "ConferenceParticipantsAdded",
+                title: data.conference.title,
+                conferenceId: data.conference.id,
+                link: data.conference.link,
+                userIds: values.userIds,          // die eingeladenen User
+                organizerId: data.conference.organizerId,
+            });
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-expect-error
         } catch (e: never) {

@@ -4,6 +4,7 @@ import "./globals.css";
 import React from "react";
 import {AuthProvider} from "@/context/AuthContext";
 import {WebSocketProvider} from "@/context/WebSocketContext";
+import {Toaster} from "@/components/ui/sonner";
 
 const geistSans = Geist({
     variable: "--font-geist-sans",
@@ -33,6 +34,7 @@ export default function RootLayout({
             <AuthProvider>
                 <WebSocketProvider>
                     {children}
+                    <Toaster position="top-center" richColors/>
                 </WebSocketProvider>
             </AuthProvider>
         </body>

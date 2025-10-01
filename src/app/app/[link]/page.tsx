@@ -80,7 +80,7 @@ export default function Page({params}: { params: Promise<{ link: string }> }) {
             if (formattedMsg.conferenceId === conference?.id)
                 fetchConference();
         })
-    }, [conference, ws, link, fetchWithAuth]);
+    }, [link, fetchWithAuth, ws, conference?.id]);
 
     // Users laden
     useEffect(() => {
@@ -167,6 +167,8 @@ export default function Page({params}: { params: Promise<{ link: string }> }) {
             ws.send({
                 type: "ConferenceParticipantsAdded",
                 conferenceId: conference.id,
+                userIds: selectedUserIds,
+                link: conference.link,
             })
 
             setSelectedUserIds([]);

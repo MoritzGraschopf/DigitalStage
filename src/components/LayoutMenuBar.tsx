@@ -8,12 +8,50 @@ import {
     MenubarSeparator,
     MenubarTrigger,
 } from "@/components/ui/menubar";
-import React from "react";
+import React, {useCallback, useEffect, useRef} from "react";
 import Link from "next/link";
 import NewConferenceDialog from "@/components/NewConferenceDialog";
+import {useRouter} from "next/navigation";
+import {useWS} from "@/context/WebSocketContext";
+import {useAuth} from "@/context/AuthContext";
+import {toast} from "sonner";
 
 export default function LayoutMenuBar({logoutAction}: { logoutAction: () => void }) {
     const [isDialogOpen, setIsDialogOpen] = React.useState(false);
+    const router = useRouter();
+    const { user } = useAuth();
+    const ws = useWS()
+
+    const userIdRef = useRef<string | null>(null);
+    useEffect(() => {
+        userIdRef.current = user?.id ?? null;
+    }, [user?.id]);
+
+    const onParticipantsAdded = useCallback((msg: unknown) => {
+        const { conferenceId, userIds, link, title } = (msg as {
+            title: string;
+            conferenceId: string;
+            userIds: string[];
+            link: string;
+        });
+
+        const myId = userIdRef.current;
+        if (myId && userIds.includes(myId)) {
+            toast("Du wurdest zu einer Konferenz hinzugefügt", {
+                id: `added-${conferenceId}`, // verhindert Duplikate
+                description: `Konferenz: ${title}`,
+                action: {
+                    label: "Zur Konferenz",
+                    onClick: () => router.push(`/app/${link}`),
+                },
+            });
+        }
+    }, [router]);
+
+    useEffect(() => {
+        if (!ws) return;
+        ws.on("server:ConferenceParticipantsAdded", onParticipantsAdded);
+    }, [ws, onParticipantsAdded]);
 
     const handleReload = () => {
         console.log("Neu laden triggered!");
