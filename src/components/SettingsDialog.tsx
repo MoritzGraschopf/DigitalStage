@@ -10,6 +10,10 @@ import {
 import {Activity, Bot, Settings, Shield, User as UserIcon} from "lucide-react"
 import GenerelPage from "@/components/settings/General";
 import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs";
+import SecurityPage from "@/components/settings/Security";
+import ActivityPage from "@/components/settings/Activity";
+import SettingsPage from "@/components/settings/Settings";
+import DeveloperPage from "@/components/settings/Developer";
 
 interface SettingsDialogProps {
     open: boolean
@@ -25,10 +29,10 @@ type NavItem = {
 const data: { nav: NavItem[] } = {
     nav: [
         {name: "Allgemein", icon: UserIcon, page: () => <GenerelPage/>},
-        {name: "Sicherheit", icon: Shield, page: () => <div className="p-6">Sicherheit</div>},
-        {name: "Aktivität", icon: Activity, page: () => <div className="p-6">Aktivität</div>},
-        {name: "Einstellungen", icon: Settings, page: () => <div className="p-6">Einstellungen</div>},
-        {name: "Entwickler", icon: Bot, page: () => <div className="p-6">Entwickler</div>},
+        {name: "Sicherheit", icon: Shield, page: () => <SecurityPage/>},
+        {name: "Aktivität", icon: Activity, page: () => <ActivityPage/>},
+        {name: "Einstellungen", icon: Settings, page: () => <SettingsPage/>},
+        {name: "Entwickler", icon: Bot, page: () => <DeveloperPage/>},
     ],
 }
 

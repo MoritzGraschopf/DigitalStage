@@ -21,6 +21,13 @@ const GenerelPage: React.FC = () => {
                 <div>Nachname:</div>
                 <div>{user?.lastName}</div>
             </div>
+
+            <Separator className="my-2"/>
+
+            <div className="flex justify-between">
+                <div>Email:</div>
+                <div>{user?.email}</div>
+            </div>
         </div>
     )
 }
