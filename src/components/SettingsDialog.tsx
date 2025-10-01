@@ -7,17 +7,9 @@ import {
     DialogDescription,
     DialogTitle,
 } from "@/components/ui/dialog"
-import {
-    Sidebar,
-    SidebarContent,
-    SidebarGroup,
-    SidebarGroupContent,
-    SidebarMenu,
-    SidebarMenuButton,
-    SidebarMenuItem,
-    SidebarProvider,
-} from "@/components/ui/sidebar"
-import { Activity, Bot, Settings, Shield, User as UserIcon } from "lucide-react"
+import {Activity, Bot, Settings, Shield, User as UserIcon} from "lucide-react"
+import GenerelPage from "@/components/settings/General";
+import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs";
 
 interface SettingsDialogProps {
     open: boolean
@@ -32,63 +24,38 @@ type NavItem = {
 
 const data: { nav: NavItem[] } = {
     nav: [
-        { name: "Allgemein", icon: UserIcon, page: () => <div className="p-6">Allgemein</div> },
-        { name: "Sicherheit", icon: Shield, page: () => <div className="p-6">Sicherheit</div> },
-        { name: "Aktivität", icon: Activity, page: () => <div className="p-6">Aktivität</div> },
-        { name: "Einstellungen", icon: Settings, page: () => <div className="p-6">Einstellungen</div> },
-        { name: "Entwickler", icon: Bot, page: () => <div className="p-6">Entwickler</div> },
+        {name: "Allgemein", icon: UserIcon, page: () => <GenerelPage/>},
+        {name: "Sicherheit", icon: Shield, page: () => <div className="p-6">Sicherheit</div>},
+        {name: "Aktivität", icon: Activity, page: () => <div className="p-6">Aktivität</div>},
+        {name: "Einstellungen", icon: Settings, page: () => <div className="p-6">Einstellungen</div>},
+        {name: "Entwickler", icon: Bot, page: () => <div className="p-6">Entwickler</div>},
     ],
 }
 
-export function SettingsDialog({ open, setOpen }: SettingsDialogProps) {
-    const [active, setActive] = React.useState<string>(data.nav[0]?.name ?? "Allgemein")
-
-    const ActivePage = React.useMemo(
-        () => data.nav.find((n) => n.name === active)?.page ?? (() => <div className="p-6" />),
-        [active]
-    )
-
+export function SettingsDialog({open, setOpen}: SettingsDialogProps) {
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogContent className="overflow-hidden p-0 md:max-h-[500px] md:max-w-[700px] lg:max-w-[800px]">
+            <DialogContent showCloseButton={false} className="overflow-hidden p-0 md:max-h-[500px] md:max-w-[700px]">
                 <DialogTitle className="sr-only">Profil</DialogTitle>
                 <DialogDescription className="sr-only">Settings Page</DialogDescription>
 
-                <SidebarProvider className="items-start">
-                    {/* Sidebar (links) */}
-                    <Sidebar collapsible="none" className="hidden md:flex">
-                        <SidebarContent>
-                            <SidebarGroup>
-                                <SidebarGroupContent>
-                                    <SidebarMenu>
-                                        {data.nav.map((item) => {
-                                            const Icon = item.icon
-                                            const isActive = active === item.name
-                                            return (
-                                                <SidebarMenuItem key={item.name}>
-                                                    <SidebarMenuButton
-                                                        // Kein <a/> nötig – direkt klickbarer Button
-                                                        onClick={() => setActive(item.name)}
-                                                        isActive={isActive}
-                                                        className="justify-start gap-2"
-                                                    >
-                                                        <Icon className="h-4 w-4" />
-                                                        <span>{item.name}</span>
-                                                    </SidebarMenuButton>
-                                                </SidebarMenuItem>
-                                            )
-                                        })}
-                                    </SidebarMenu>
-                                </SidebarGroupContent>
-                            </SidebarGroup>
-                        </SidebarContent>
-                    </Sidebar>
-
-                    {/* Content (rechts) */}
-                    <main className="flex h-[480px] flex-1 flex-col overflow-auto">
-                        <ActivePage />
-                    </main>
-                </SidebarProvider>
+                <Tabs defaultValue={data.nav[0]?.name ?? "Allgemein"}>
+                    <TabsList className="w-full flex gap-2">
+                        {data.nav.map((item) => (
+                            <TabsTrigger key={item.name} value={item.name}>
+                                <span><item.icon/></span>
+                                <span className="ml-2 hidden md:inline">{item.name}</span>
+                            </TabsTrigger>
+                        ))}
+                    </TabsList>
+                    {data.nav.map((item) => (
+                        <TabsContent key={item.name} value={item.name}>
+                            <main className="flex flex-1 flex-col overflow-auto">
+                                <item.page/>
+                            </main>
+                        </TabsContent>
+                    ))}
+                </Tabs>
             </DialogContent>
         </Dialog>
     )
