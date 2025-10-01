@@ -68,6 +68,15 @@ wss.on('connection', (ws) => {
                 }
             })
         }
+
+        if (msg.type === 'ConferenceParticipantsAdded') {
+            wss.clients.forEach((client) => {
+                client.send(JSON.stringify({
+                    type: 'server:ConferenceParticipantsAdded',
+                    conferenceId: msg.conferenceId,
+                }))
+            })
+        }
     });
 });
 

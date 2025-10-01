@@ -7,7 +7,7 @@ const MAX_PARTICIPANTS = 11; // inkl. Organizer
 
 export async function POST(
     req: NextRequest,
-    { params }: { params: { link: string } }
+    { params }: { params: Promise<{ link: string }> }
 ) {
     try {
         const organizerId = getUserIdFromAuthHeader(req.headers.get("authorization"));
@@ -42,7 +42,7 @@ export async function POST(
             );
         }
 
-        const { link } = params;
+        const { link } = await params;
 
         const conf = await prisma.conference.findUnique({
             where: { link },
