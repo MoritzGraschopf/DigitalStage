@@ -73,7 +73,10 @@ wss.on('connection', (ws) => {
             wss.clients.forEach((client) => {
                 client.send(JSON.stringify({
                     type: 'server:ConferenceParticipantsAdded',
+                    title: msg.title,
                     conferenceId: msg.conferenceId,
+                    userIds: msg.userIds,
+                    link: msg.link,
                 }))
             })
         }
