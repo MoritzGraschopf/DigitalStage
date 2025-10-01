@@ -15,9 +15,11 @@ import {useRouter} from "next/navigation";
 import {useWS} from "@/context/WebSocketContext";
 import {useAuth} from "@/context/AuthContext";
 import {toast} from "sonner";
+import {SettingsDialog} from "@/components/SettingsDialog";
 
 export default function LayoutMenuBar({logoutAction}: { logoutAction: () => void }) {
     const [isDialogOpen, setIsDialogOpen] = React.useState(false);
+    const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
     const router = useRouter();
     const { user } = useAuth();
     const ws = useWS()
@@ -94,10 +96,8 @@ export default function LayoutMenuBar({logoutAction}: { logoutAction: () => void
                 <MenubarMenu>
                     <MenubarTrigger>Account</MenubarTrigger>
                     <MenubarContent>
-                        <MenubarItem>
-                            <Link href="/app/account">
-                                Profil
-                            </Link>
+                        <MenubarItem onSelect={() => setIsSettingsOpen(true)}>
+                            Profil
                         </MenubarItem>
                         <MenubarSeparator/>
                         <MenubarItem variant="destructive" onSelect={logoutAction}>Abmelden</MenubarItem>
@@ -105,6 +105,7 @@ export default function LayoutMenuBar({logoutAction}: { logoutAction: () => void
                 </MenubarMenu>
             </Menubar>
             <NewConferenceDialog open={isDialogOpen} setOpen={setIsDialogOpen}/>
+            <SettingsDialog open={isSettingsOpen} setOpen={setIsSettingsOpen}/>
         </>
     );
 }
