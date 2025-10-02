@@ -36,6 +36,26 @@ model User {
   organizedConferences Conference[]     @relation("Organizer")
   chatMessages         ChatMessage[]
   participations       UserConference[]
+  settings             UserSettings?
+}
+
+model UserSettings {
+  userId String @id
+  user   User   @relation(fields: [userId], references: [id])
+
+  // UI / Verhalten
+  locale      String  @default("de-AT")
+  timezone    String  @default("Europe/Vienna")
+  autoplayHls Boolean @default(true)
+
+  // Benachrichtigungen
+  notifyChatToasts  Boolean @default(true)
+  notifyConfCreated Boolean @default(true)
+
+  // Technisch
+  wsReconnect Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
 }
 
 model Conference {

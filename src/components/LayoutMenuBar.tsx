@@ -15,12 +15,16 @@ import {useRouter} from "next/navigation";
 import {useWS} from "@/context/WebSocketContext";
 import {useAuth} from "@/context/AuthContext";
 import {toast} from "sonner";
+import {SettingsDialog} from "@/components/SettingsDialog";
+import {useSettings} from "@/hooks/useSettings";
 
 export default function LayoutMenuBar({logoutAction}: { logoutAction: () => void }) {
     const [isDialogOpen, setIsDialogOpen] = React.useState(false);
+    const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
     const router = useRouter();
     const { user } = useAuth();
     const ws = useWS()
+    const { settings } = useSettings()
 
     const userIdRef = useRef<string | null>(null);
     useEffect(() => {
@@ -49,9 +53,10 @@ export default function LayoutMenuBar({logoutAction}: { logoutAction: () => void
     }, [router]);
 
     useEffect(() => {
-        if (!ws) return;
+        //TODO: es geht noch nicht
+        if (!ws || !settings?.notifyConfCreated) return;
         ws.on("server:ConferenceParticipantsAdded", onParticipantsAdded);
-    }, [ws, onParticipantsAdded]);
+    }, [ws, onParticipantsAdded, settings?.notifyConfCreated]);
 
     const handleReload = () => {
         console.log("Neu laden triggered!");
@@ -94,10 +99,8 @@ export default function LayoutMenuBar({logoutAction}: { logoutAction: () => void
                 <MenubarMenu>
                     <MenubarTrigger>Account</MenubarTrigger>
                     <MenubarContent>
-                        <MenubarItem>
-                            <Link href="/app/account">
-                                Profil
-                            </Link>
+                        <MenubarItem onSelect={() => setIsSettingsOpen(true)}>
+                            Profil
                         </MenubarItem>
                         <MenubarSeparator/>
                         <MenubarItem variant="destructive" onSelect={logoutAction}>Abmelden</MenubarItem>
@@ -105,6 +108,7 @@ export default function LayoutMenuBar({logoutAction}: { logoutAction: () => void
                 </MenubarMenu>
             </Menubar>
             <NewConferenceDialog open={isDialogOpen} setOpen={setIsDialogOpen}/>
+            <SettingsDialog open={isSettingsOpen} setOpen={setIsSettingsOpen}/>
         </>
     );
 }

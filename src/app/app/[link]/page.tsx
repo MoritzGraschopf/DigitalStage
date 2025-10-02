@@ -152,7 +152,6 @@ export default function Page({params}: { params: Promise<{ link: string }> }) {
 
     // Einladungen absenden
     const handleInviteSubmit = async () => {
-        //TODO: Teilnehmer hinzufügen
         try {
             if (!conference) return;
             if (selectedUserIds.length === 0) {
