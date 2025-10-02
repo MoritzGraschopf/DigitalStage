@@ -216,7 +216,7 @@ export default function Page({params}: { params: Promise<{ link: string }> }) {
 
                     {conference.organizerId === user?.id && (
                         <>
-                            <Button onClick={() => setCommandOpen(true)}>Teilnehmer hinzufügen</Button>
+                            <Button disabled={conference.status === "ENDED"} onClick={() => setCommandOpen(true)}>Teilnehmer hinzufügen</Button>
 
                             <CommandDialog
                                 open={commandOpen}
