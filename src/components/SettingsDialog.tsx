@@ -39,7 +39,7 @@ const data: { nav: NavItem[] } = {
 export function SettingsDialog({open, setOpen}: SettingsDialogProps) {
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogContent showCloseButton={false} className="overflow-hidden p-0 md:max-h-[500px] md:max-w-[700px]">
+            <DialogContent showCloseButton={false} className="overflow-hidden p-0 md:max-h-[600px] md:max-w-[700px]">
                 <DialogTitle className="sr-only">Profil</DialogTitle>
                 <DialogDescription className="sr-only">Settings Page</DialogDescription>
 

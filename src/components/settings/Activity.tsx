@@ -117,7 +117,7 @@ const ActivityPage: React.FC = () => {
                     {ended.length === 0 ? (
                         <p className="text-muted-foreground text-sm italic">Keine Konferenz organiesiert oder teilgehabt</p>
                     ) : ended.map((conference) => (
-                        <Button key={conference.id} variant="outline" size="sm" className="text-sm" asChild>
+                        <Button disabled key={conference.id} variant="outline" size="sm" className="text-sm" asChild>
                             <Link href={"/app/" + conference.link}>
                                 {conference.title}
                             </Link>
