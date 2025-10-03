@@ -1,7 +1,7 @@
 "use client"
 
 import {Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage} from "@/components/ui/form";
-import {use, useEffect, useState} from "react";
+import {use, useEffect, useRef, useState} from "react";
 import {useForm} from "react-hook-form"
 import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs";
 import {Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle} from "@/components/ui/card";
@@ -17,6 +17,9 @@ import Link from "next/link";
 import {Tooltip, TooltipContent, TooltipTrigger} from "@/components/ui/tooltip";
 import {Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger} from "@/components/ui/sheet";
 import {Separator} from "@/components/ui/separator";
+import {useWebRTC} from "@/lib/webRTC";
+import { useWebSocket } from "@/context/WebSocketContext";
+//import {useWebsocket} from "next/dist/client/dev/hot-reloader/app/use-websocket";
 
 const participantSchema = z.object({
     password: z.string().min(8, {
@@ -34,6 +37,17 @@ const mapStatus = (status: string): string => {
     return statusMap[status] || "Unbekannt";
 };
 
+function Video({stream, muted=false, className = ""}:
+               {stream: MediaStream|null, muted?: boolean, className?: string}) {
+    const ref = useRef<HTMLVideoElement>(null);
+    useEffect(() => {
+        if(ref.current && stream)
+            ref.current.srcObject = stream;
+    }, [stream]);
+
+    return <video ref={ref} autoPlay playsInline muted={muted} className={className}></video>
+}
+
 export default function Page({
                                  params,
                              }: {
@@ -44,7 +58,9 @@ export default function Page({
     const [joined, setJoined] = useState(false)
     const [showText, setShowText] = useState(false);
     const [copied, setCopied] = useState(false);
-    const {fetchWithAuth} = useAuth()
+    const [tabRole, setTabRole] = useState<"VIEWER" | "PARTICIPANT">("VIEWER");
+    const {socket} = useWebSocket();
+    const {fetchWithAuth, user} = useAuth()
     const {link} = use(params);
 
     const handleCopy = async () => {
@@ -80,6 +96,9 @@ export default function Page({
         fetchConference().then()
     }, [link, fetchWithAuth]);
 
+    const isOrganizer = !!conference && !!user?.id && conference.organizerId === user.id;
+    const effectiveRole: 'VIEWER' | 'PARTICIPANT' | 'ORGANIZER' = isOrganizer? 'ORGANIZER' : tabRole;
+
     const form = useForm<z.infer<typeof participantSchema>>({
         resolver: zodResolver(participantSchema),
         defaultValues: {
@@ -88,10 +107,17 @@ export default function Page({
     })
 
     function onSubmit(values: z.infer<typeof participantSchema>) {
-        // Do something with the form values.
-        // ✅ This will be type-safe and validated.
+        setTabRole('PARTICIPANT');
+        setJoined(true);
         console.log(values)
     }
+
+    const { localStream, remoteStreams } = useWebRTC({
+        socket,
+        userId: user?.id ?? "anonymous",
+        conferenceId: conference?.id ?? "",
+        role: joined ? "PARTICIPANT" : "VIEWER",
+    });
 
     if (!conference) {
         return (
@@ -105,28 +131,55 @@ export default function Page({
     }
 
     return joined ? (
-        <div
-            className="grid grid-cols-[3fr_1fr] grid-rows-[min-content_1fr] h-screen w-screen fixed top-0 left-0 z-[-1] overflow-hidden">
+        <div className="grid grid-cols-[3fr_1fr] grid-rows-[min-content_1fr] h-screen w-screen fixed top-0 left-0 z-[-1] overflow-hidden">
             <div className="h-13"></div>
             <div></div>
 
             <div className="ml-2 border rounded-md relative h-full">
-                {disabled && (
+                {disabled ? (
                     <div className="h-full justify-center items-center flex flex-col">
                         <div className="font-medium text-xl">Konferenz beendet</div>
                         <div className="text-muted-foreground">
-                            Sie können die Konferenz verlassen oder den Chatverlauf
-                            sowie die Konferenzinformationen einsehen
+                            Sie können die Konferenz verlassen oder den Chatverlauf sowie die Konferenzinformationen einsehen
                         </div>
                     </div>
+                ) : (
+                    <>
+                        {effectiveRole === "VIEWER" ? (
+                            // TODO: Hier HLS-Player einbauen
+                            <div className="h-full flex items-center justify-center text-muted-foreground">
+                                Du bist <b>Zuschauer</b> – hier kommt der HLS-Player hin.
+                            </div>
+                        ) : (
+                            // Organizer/Participant: WebRTC-Layout
+                            <div className="h-full p-2 grid grid-rows-[auto_1fr] gap-2">
+                                {/* Lokales Video */}
+                                <div className="flex gap-2">
+                                    <div className="w-64 border rounded-md overflow-hidden">
+                                        <Video stream={localStream} muted className="w-full h-40 object-cover" />
+                                        <div className="px-2 py-1 text-sm text-muted-foreground">
+                                            {isOrganizer ? "Du (Organizer)" : "Du"}
+                                        </div>
+                                    </div>
+                                </div>
+                                {/* Remote-Videos */}
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 overflow-auto">
+                                    {Object.entries(remoteStreams).map(([peerId, stream]) => (
+                                        <div key={peerId} className="border rounded-md overflow-hidden">
+                                            <Video stream={stream} className="w-full h-40 object-cover" />
+                                            <div className="px-2 py-1 text-xs text-muted-foreground">{peerId}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </>
                 )}
 
                 <div className="absolute bottom-2 left-2">
-
-
                     <Button asChild>
                         <Link href="/app">
-                            <ArrowLeft/>
+                            <ArrowLeft />
                             Verlassen
                         </Link>
                     </Button>
@@ -134,7 +187,7 @@ export default function Page({
                     <Sheet>
                         <SheetTrigger asChild>
                             <Button size="icon" variant="outline" className="ml-2">
-                                <Info/>
+                                <Info />
                             </Button>
                         </SheetTrigger>
                         <SheetContent>
@@ -147,35 +200,33 @@ export default function Page({
                             <div className="grid grid-cols-[min-content_1fr] items-center gap-2 px-4">
                                 <div className="font-medium">Titel:</div>
                                 <div className="text-right">{conference.title}</div>
-
-                                <Separator className="col-span-2"/>
+                                <Separator className="col-span-2" />
 
                                 <div className="font-medium">Beschreibung:</div>
                                 <div className="text-right">{conference.description}</div>
-
-                                <Separator className="col-span-2"/>
+                                <Separator className="col-span-2" />
 
                                 <div className="font-medium">Von:</div>
-                                <div
-                                    className="text-right">{!!conference.startAt ? new Date(conference.startAt).toLocaleDateString("de-DE") : "Datum nicht verfügbar"}</div>
+                                <div className="text-right">
+                                    {!!conference.startAt ? new Date(conference.startAt).toLocaleDateString("de-DE") : "Datum nicht verfügbar"}
+                                </div>
 
                                 <div className="font-medium">Bis:</div>
-                                <div
-                                    className="text-right">{!!conference.endDate ? new Date(conference.endDate).toLocaleDateString("de-DE") : "Datum nicht verfügbar"}</div>
+                                <div className="text-right">
+                                    {!!conference.endDate ? new Date(conference.endDate).toLocaleDateString("de-DE") : "Datum nicht verfügbar"}
+                                </div>
 
-                                <Separator className="col-span-2"/>
-
+                                <Separator className="col-span-2" />
                                 <div className="font-medium">Status:</div>
                                 <div className="text-right">{mapStatus(conference.status)}</div>
 
-                                <Separator className="col-span-2"/>
-
+                                <Separator className="col-span-2" />
                                 <div className="font-medium">Link:</div>
                                 <div className="text-right">
                                     <Tooltip>
                                         <TooltipTrigger asChild>
                                             <Button onClick={handleCopy} size="icon" variant="outline">
-                                                {copied ? <Check/> : <Copy/>}
+                                                {copied ? <Check /> : <Copy />}
                                             </Button>
                                         </TooltipTrigger>
                                         <TooltipContent side="left">
@@ -188,17 +239,23 @@ export default function Page({
                     </Sheet>
                 </div>
             </div>
+
             <div className="mx-2 border rounded-md h-full flex-grow overflow-hidden">
-                <ConferenceChat conference={conference} disabled={disabled}/>
+                <ConferenceChat conference={conference} disabled={disabled} />
             </div>
         </div>
     ) : (
         <div className="flex justify-center items-center h-screen w-screen fixed top-0 left-0 z-[-1]">
-            <Tabs defaultValue="viewer" className="w-90">
+            <Tabs
+                defaultValue="viewer"
+                className="w-90"
+                onValueChange={(v) => setTabRole(v === "participant" ? "PARTICIPANT" : "VIEWER")}
+            >
                 <TabsList className="w-full">
                     <TabsTrigger value="viewer">Zuschauer</TabsTrigger>
                     <TabsTrigger value="participant">Teilnehmer</TabsTrigger>
                 </TabsList>
+
                 <TabsContent value="viewer">
                     <Card>
                         <CardHeader>
@@ -206,12 +263,16 @@ export default function Page({
                             <CardDescription>Als Zuschauer beitreten</CardDescription>
                         </CardHeader>
                         <CardFooter>
-                            <Button size="sm" className="w-full" onClick={() => setJoined(true)}>
+                            <Button
+                                size="sm"
+                                className="w-full"
+                                onClick={() => { setTabRole('PARTICIPANT'); setJoined(true); }}>
                                 Beitreten
                             </Button>
                         </CardFooter>
                     </Card>
                 </TabsContent>
+
                 <TabsContent value="participant">
                     <Card>
                         <CardHeader>
@@ -224,20 +285,20 @@ export default function Page({
                                     <FormField
                                         control={form.control}
                                         name="password"
-                                        render={({field}) => (
+                                        render={({ field }) => (
                                             <FormItem>
                                                 <FormLabel>Passwort</FormLabel>
                                                 <FormControl>
-                                                    <Input type="text" {...field} autoComplete="off"/>
+                                                    <Input type="text" {...field} autoComplete="off" />
                                                 </FormControl>
                                                 <FormDescription>
                                                     Passwort, welches vom Host festgelegt worden ist.
                                                 </FormDescription>
-                                                <FormMessage/>
+                                                <FormMessage />
                                             </FormItem>
                                         )}
                                     />
-                                    <Button className="w-full" size="sm">
+                                    <Button className="w-full" size="sm" type="submit">
                                         Beitreten
                                     </Button>
                                 </form>

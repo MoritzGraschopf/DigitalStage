@@ -4,9 +4,10 @@ import { getUserIdFromAuthHeader } from "@/lib/auth";
 
 export async function POST(
     req: NextRequest,
-    {params}: {params: {link: string}}
+    {params}: {params: Promise<{link: string}>}
 ){
     try{
+        const {link} = await params;
         const organizerId = getUserIdFromAuthHeader(req.headers.get("authorization"));
         if(!organizerId)
             return NextResponse.json({message: 'Unauthorized'}, {status: 401});
@@ -16,7 +17,7 @@ export async function POST(
             return NextResponse.json({message: 'UserId is required (number)'}, {status: 400});
 
         const conf = await prisma.conference.findUnique({
-            where: {link: params.link},
+            where: {link: link},
             select: {id: true, organizerId: true}
         });
 

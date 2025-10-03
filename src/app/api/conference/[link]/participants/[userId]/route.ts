@@ -4,15 +4,16 @@ import { getUserIdFromAuthHeader } from "@/lib/auth";
 
 export async function DELETE(
     req: NextRequest,
-    {params}: {params: {link: string; userId: string}}
+    {params}: {params: Promise<{link: string; userId: string}>}
 ){
     try{
+        const { link, userId } = await params;
         const organizerId = getUserIdFromAuthHeader(req.headers.get('authorization'));
         if(!organizerId)
             return NextResponse.json({message: 'Unauthorized'}, {status: 401});
 
         const conf = await prisma.conference.findUnique({
-            where: {link: params.link},
+            where: {link: link},
             select: {id: true, organizerId: true}
         });
 
@@ -21,9 +22,9 @@ export async function DELETE(
         if(conf.organizerId !== organizerId)
             return NextResponse.json({message: 'Forbidden (organizer only)'}, {status: 403});
 
-        const targetUserId = Number(params.userId);
+        const targetUserId = String(userId);
 
-        if(!Number.isInteger(targetUserId))
+        if(!targetUserId)
             return NextResponse.json({message: 'Invalid user id'}, {status: 404});
 
         if(targetUserId === organizerId)
