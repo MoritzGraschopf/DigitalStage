@@ -8,12 +8,55 @@ import {
     MenubarSeparator,
     MenubarTrigger,
 } from "@/components/ui/menubar";
-import React from "react";
+import React, {useCallback, useEffect, useRef} from "react";
 import Link from "next/link";
 import NewConferenceDialog from "@/components/NewConferenceDialog";
+import {useRouter} from "next/navigation";
+import {useWS} from "@/context/WebSocketContext";
+import {useAuth} from "@/context/AuthContext";
+import {toast} from "sonner";
+import {SettingsDialog} from "@/components/SettingsDialog";
+import {useSettings} from "@/hooks/useSettings";
 
-export default function LayoutMenuBar({logout}: { logout: () => void }) {
+export default function LayoutMenuBar({logoutAction}: { logoutAction: () => void }) {
     const [isDialogOpen, setIsDialogOpen] = React.useState(false);
+    const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
+    const router = useRouter();
+    const { user } = useAuth();
+    const ws = useWS()
+    const { settings } = useSettings()
+
+    const userIdRef = useRef<string | null>(null);
+    useEffect(() => {
+        userIdRef.current = user?.id ?? null;
+    }, [user?.id]);
+
+    const onParticipantsAdded = useCallback((msg: unknown) => {
+        const { conferenceId, userIds, link, title } = (msg as {
+            title: string;
+            conferenceId: string;
+            userIds: string[];
+            link: string;
+        });
+
+        const myId = userIdRef.current;
+        if (myId && userIds.includes(myId)) {
+            toast("Du wurdest zu einer Konferenz hinzugefügt", {
+                id: `added-${conferenceId}`, // verhindert Duplikate
+                description: `Konferenz: ${title}`,
+                action: {
+                    label: "Zur Konferenz",
+                    onClick: () => router.push(`/app/${link}`),
+                },
+            });
+        }
+    }, [router]);
+
+    useEffect(() => {
+        //TODO: es geht noch nicht
+        if (!ws || !settings?.notifyConfCreated) return;
+        ws.on("server:ConferenceParticipantsAdded", onParticipantsAdded);
+    }, [ws, onParticipantsAdded, settings?.notifyConfCreated]);
 
     const handleReload = () => {
         console.log("Neu laden triggered!");
@@ -29,6 +72,12 @@ export default function LayoutMenuBar({logout}: { logout: () => void }) {
                 <MenubarMenu>
                     <MenubarTrigger>Konferenz</MenubarTrigger>
                     <MenubarContent>
+                        <MenubarItem asChild>
+                            <Link href="/app">
+                                Alle Konferenzen
+                            </Link>
+                        </MenubarItem>
+                        <MenubarSeparator/>
                         <MenubarItem onSelect={() => setIsDialogOpen(true)}>
                             Konferenz erstellen
                         </MenubarItem>
@@ -50,17 +99,16 @@ export default function LayoutMenuBar({logout}: { logout: () => void }) {
                 <MenubarMenu>
                     <MenubarTrigger>Account</MenubarTrigger>
                     <MenubarContent>
-                        <MenubarItem>
-                            <Link href="/app/account">
-                                Profil
-                            </Link>
+                        <MenubarItem onSelect={() => setIsSettingsOpen(true)}>
+                            Profil
                         </MenubarItem>
                         <MenubarSeparator/>
-                        <MenubarItem variant="destructive" onSelect={logout}>Abmelden</MenubarItem>
+                        <MenubarItem variant="destructive" onSelect={logoutAction}>Abmelden</MenubarItem>
                     </MenubarContent>
                 </MenubarMenu>
             </Menubar>
             <NewConferenceDialog open={isDialogOpen} setOpen={setIsDialogOpen}/>
+            <SettingsDialog open={isSettingsOpen} setOpen={setIsSettingsOpen}/>
         </>
     );
 }

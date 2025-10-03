@@ -29,16 +29,16 @@ const toYYYYMMDDTHHMM = (d: Date) =>
 
 // ---------- Schema ----------
 const conferenceScheme = z.object({
-    title: z.string().min(1, {message: "Bitte gib einen Titel an."}).trim(),
-    description: z.string().max(120, {message: "Die Beschreibung darf höchstens 120 Zeichen enthalten."}).trim().optional(),
+    title: z.string().min(1, {error: "Bitte gib einen Titel an."}).max(20, { error: "Titel darf nur 20 Zeichen lang sein"}).trim(),
+    description: z.string().max(120, {error: "Die Beschreibung darf höchstens 120 Zeichen enthalten."}).trim().optional(),
     startAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
     endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
-    userIds: z.array(z.string()).max(10, { message: "Maximal 10 Teilnehmer auswählbar." }),
+    userIds: z.array(z.string()).max(10, { error: "Maximal 10 Teilnehmer auswählbar." }),
 }).refine((d) => {
     const s = new Date(d.startAt);
     const e = new Date(d.endDate);
     return e >= s;
-}, {message: "Ende darf nicht vor dem Start liegen.", path: ["endDate"]});
+}, {error: "Ende darf nicht vor dem Start liegen.", path: ["endDate"]});
 
 interface NewConferenceSheetProps {
     open: boolean;
@@ -152,6 +152,15 @@ const NewConferenceSheet: React.FC<NewConferenceSheetProps> = ({open, setOpen}) 
                 organizerId: data.conference.organizerId,
                 participants: data.conference.participants,
             })
+
+            ws?.send({
+                type: "ConferenceParticipantsAdded",
+                title: data.conference.title,
+                conferenceId: data.conference.id,
+                link: data.conference.link,
+                userIds: values.userIds,          // die eingeladenen User
+                organizerId: data.conference.organizerId,
+            });
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-expect-error
         } catch (e: never) {

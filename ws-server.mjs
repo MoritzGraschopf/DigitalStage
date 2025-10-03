@@ -107,6 +107,18 @@ wss.on('connection', (ws) => {
             })
         }
 
+        if (msg.type === 'ConferenceParticipantsAdded') {
+            wss.clients.forEach((client) => {
+                client.send(JSON.stringify({
+                    type: 'server:ConferenceParticipantsAdded',
+                    title: msg.title,
+                    conferenceId: msg.conferenceId,
+                    userIds: msg.userIds,
+                    link: msg.link,
+                }))
+            })
+        }
+
         if(msg.type === 'webrtc:join'){
             const {userId, conferenceId, role} = msg;
             ws.userId = userId;
