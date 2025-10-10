@@ -142,6 +142,8 @@ wss.on('connection', (ws) => {
                type: 'webrtc:peer-joined',
                userId
             });
+
+            console.log(msg);
         }
 
         if(msg.type === 'webrtc:offer' ||
@@ -155,6 +157,7 @@ wss.on('connection', (ws) => {
             const target = room.get(to);
             if(!target)
                 return;
+            console.log(msg);
             safeSend(target, msg);
         }
 
@@ -168,6 +171,7 @@ wss.on('connection', (ws) => {
                    userId
                 });
             }
+            console.log(msg);
         }
     });
 });

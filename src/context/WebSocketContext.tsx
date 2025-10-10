@@ -22,6 +22,24 @@ type WSContextType = {
 
 const WSContext = createContext<WSContextType | null>(null);
 
+const getWsUrl = () => {
+    // 1) Bevorzugt gesetzte Env (z.B. ws://10.0.29.108:3001)
+    const fromEnv = process.env.NEXT_PUBLIC_WS_URL;
+    if (fromEnv) return fromEnv;
+
+    // 2) Sonst dynamisch vom aktuellen Host ableiten (gleiches Host/Schema)
+    if (typeof window !== 'undefined') {
+        const isSecure = window.location.protocol === 'https:';
+        const scheme = isSecure ? 'wss' : 'ws';
+        // Wenn dein WS-Server auf einem separaten Port läuft, hier anpassen:
+        const port = window.location.port || (isSecure ? '443' : '80');
+        return `${scheme}://${window.location.hostname}:${port}/ws`;
+    }
+
+    // 3) SSR-Fallback (wird vom Browser eh überschrieben)
+    return 'ws://localhost:3001';
+};
+
 export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     const [status, setStatus] = useState<WSStatus>("connecting");
     const wsRef = useRef<WebSocket | null>(null);
@@ -34,7 +52,8 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
 
         const connect = () => {
             if (closed) return;
-            const ws = new WebSocket(process.env.NEXT_PUBLIC_WS_URL!);
+            //const ws = new WebSocket(process.env.NEXT_PUBLIC_WS_URL!);
+            const ws = new WebSocket(getWsUrl());
             wsRef.current = ws;
             setStatus("connecting");
 
