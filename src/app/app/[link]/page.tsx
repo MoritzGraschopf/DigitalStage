@@ -15,16 +15,104 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Check, Copy, Info, LoaderCircle } from "lucide-react";
 import ConferenceChat from "@/components/ConferenceChat";
+//import {Volume2, VolumeX} from "lucide-react";
 
 type ConferenceWithParticipants = Conference & { participants: UserConference[] };
 
 const mapStatus = (status: string): string =>
     ({ SCHEDULED: "Geplant", ACTIVE: "Aktiv", ENDED: "Beendet" } as const)[status] ?? "Unbekannt";
 
-function Video({ stream, muted = false, className = "" }: { stream: MediaStream | null; muted?: boolean; className?: string }) {
-    const ref = useRef<HTMLVideoElement>(null);
-    useEffect(() => { if (ref.current && stream) ref.current.srcObject = stream; }, [stream]);
-    return <video ref={ref} autoPlay playsInline muted={muted} className={className} />;
+type VideoTileProps = {
+    stream: MediaStream | null;
+    title: string;
+    mutedByDefault?: boolean;
+    className?: string;
+};
+
+export function VideoTile({
+                              stream,
+                              title,
+                              mutedByDefault = false,
+                              className = "",
+                          }: VideoTileProps) {
+    const ref = useRef<HTMLVideoElement | null>(null);
+    const [muted, setMuted] = useState<boolean>(mutedByDefault);
+
+    // falls mutedByDefault sich jemals ändert
+    useEffect(() => {
+        setMuted(mutedByDefault);
+    }, [mutedByDefault]);
+
+    useEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+
+        // srcObject setzen/clearen
+        el.srcObject = stream;
+        el.muted = mutedByDefault; // autoplay-policy safe
+
+        if (!stream) return;
+
+        const onMeta = (): void => {
+            console.log(
+                "🎬 loadedmetadata",
+                title,
+                "tracks:",
+                stream.getTracks().map(t => t.kind)
+            );
+
+            const p = el.play();
+            if (p) {
+                p.catch((err: DOMException) => {
+                    console.warn("autoplay blocked", title, err.name, err.message);
+                });
+            }
+        };
+
+        const onAddTrack = (ev: MediaStreamTrackEvent): void => {
+            console.log("➕ track added", title, ev.track.kind);
+            // sobald ein Track da ist, nochmal play versuchen
+            onMeta();
+        };
+
+        // Handler setzen
+        stream.onaddtrack = onAddTrack;
+        el.addEventListener("loadedmetadata", onMeta);
+
+        // falls metadata schon da ist
+        if (el.readyState >= 1) onMeta();
+
+        return () => {
+            // Handler entfernen
+            stream.onaddtrack = null;
+            el.removeEventListener("loadedmetadata", onMeta);
+        };
+    }, [stream, mutedByDefault, title]);
+
+    return (
+        <div className="border rounded-md overflow-hidden">
+            <video
+                ref={ref}
+                autoPlay
+                playsInline
+                muted={muted}
+                className={className}
+            />
+            <div className="px-2 py-1 text-xs text-muted-foreground flex items-center justify-between">
+                <span className="truncate">{title}</span>
+
+                {!mutedByDefault && (
+                    <button
+                        className="p-1"
+                        onClick={() => setMuted(m => !m)}
+                        title={muted ? "Ton an" : "Ton aus"}
+                    >
+                        {muted ? "🔇" : "🔊"}
+                    </button>
+                )}
+            </div>
+        </div>
+    );
 }
 
 export default function Page({ params }: { params: Promise<{ link: string }> }) {
@@ -92,15 +180,18 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
 
     useEffect(() => {
         if (!user?.id || !conference?.id) return;
+
         const payloadKey = JSON.stringify({
             userId: user.id,
             conferenceId: conference.id,
             inConference: derivedRole !== "VIEWER",
         });
 
-        if (lastInitRef.current === payloadKey) return;
+        if(lastInitRef.current === payloadKey)
+            return;
 
         ws.send({ type: "init", userId: user.id, inConference: derivedRole !== "VIEWER", conferenceId: conference.id });
+        lastInitRef.current = payloadKey;
     }, [ws, user?.id, conference?.id, derivedRole]);
 
     // Organizer-UI
@@ -153,14 +244,28 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
         }
     };
 
+    const rtcReady = !!user?.id && !!conference?.id;
+
     // --- WebRTC mit DB-basierter Rolle ---
     const { localStream, remoteStreams } = useWebRTC({
         socket,
         send,
-        userId: user?.id ?? "anonymous",
+        userId: rtcReady ? user.id : "",
         conferenceId: conference?.id ?? "",
         role: derivedRole,
     });
+
+    useEffect(() => {
+        console.log(
+            "REMOTE STREAMS",
+            Object.fromEntries(
+                Object.entries(remoteStreams).map(([id, s]) => [
+                    id,
+                    s.getTracks().map(t => t.kind),
+                ])
+            )
+        );
+    }, [remoteStreams]);
 
 
     if (!conference) {
@@ -187,22 +292,30 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                     <>
                         {derivedRole === "VIEWER" ? (
                             <div className="h-full flex items-center justify-center text-muted-foreground">
-                                Du bist <b>Zuschauer</b> – hier kommt der HLS-Player hin.
+                                Du bist <b> Zuschauer</b> – hier kommt der HLS-Player hin.
                             </div>
                         ) : (
                             <div className="h-full p-2 grid grid-rows-[auto_1fr] gap-2">
                                 <div className="flex gap-2">
                                     <div className="w-64 border rounded-md overflow-hidden">
-                                        <Video stream={localStream} muted className="w-full h-40 object-cover" />
+                                        <VideoTile
+                                            stream={localStream}
+                                            title={derivedRole === "ORGANIZER" ? "Du (Organizer)" : "Du"}
+                                            mutedByDefault={true}
+                                            className="w-full h-40 object-cover"
+                                        />
                                         <div className="px-2 py-1 text-sm text-muted-foreground">{derivedRole === "ORGANIZER" ? "Du (Organizer)" : "Du"}</div>
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 overflow-auto">
                                     {Object.entries(remoteStreams).map(([peerId, stream]) => (
-                                        <div key={peerId} className="border rounded-md overflow-hidden">
-                                            <Video stream={stream} className="w-full h-40 object-cover" />
-                                            <div className="px-2 py-1 text-xs text-muted-foreground">{peerId}</div>
-                                        </div>
+                                        <VideoTile
+                                            key={peerId}
+                                            stream={stream}
+                                            title={peerId}
+                                            mutedByDefault={true}
+                                            className="w-full h-40 object-cover"
+                                        />
                                     ))}
                                 </div>
                             </div>
