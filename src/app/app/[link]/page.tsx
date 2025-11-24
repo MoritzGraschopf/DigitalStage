@@ -158,17 +158,27 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
     }, [ws, conference?.id, fetchConference]);
 
     useEffect(() => {
+        let cancelled = false;
         (async () => {
             try {
                 const r = await fetch("/api/user");
                 const data: User[] = await r.json();
-                if (conference) setOrganizer(data.find(u => u.id === conference.organizerId) ?? null);
+                if (cancelled) return;
                 setAllUsers(data);
             } catch (e) {
                 console.error("Error fetching users:", e);
             }
         })();
-    }, [conference]);
+        return () => { cancelled = true; };
+    }, []);
+
+    useEffect(() => {
+        if (!conference) {
+            setOrganizer(null);
+            return;
+        }
+        setOrganizer(allUsers.find(u => u.id === conference.organizerId) ?? null);
+    }, [conference?.organizerId, allUsers]);
 
 
     const derivedRole: "VIEWER" | "PARTICIPANT" | "ORGANIZER" = useMemo(() => {

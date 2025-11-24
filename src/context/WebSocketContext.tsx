@@ -2,6 +2,7 @@
 
 import React, {
     createContext,
+    useCallback,
     useContext,
     useEffect,
     useMemo,
@@ -45,6 +46,18 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     const wsRef = useRef<WebSocket | null>(null);
     const handlers = useRef<Map<string, Set<MessageHandler>>>(new Map());
     const rawHandlers = useRef<Set<(evt: MessageEvent) => void>>(new Set());
+    const sendQueueRef = useRef<string[]>([]);
+
+    const flushQueue = useCallback(() => {
+        const socket = wsRef.current;
+        if (!socket || socket.readyState !== WebSocket.OPEN) return;
+
+        const queue = sendQueueRef.current;
+        while (queue.length > 0) {
+            const next = queue.shift();
+            if (next) socket.send(next);
+        }
+    }, []);
 
     useEffect(() => {
         let retry = 0;
@@ -60,6 +73,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
             ws.onopen = () => {
                 setStatus("open");
                 retry = 0;
+                flushQueue();
             };
 
             ws.onmessage = (evt) => {
@@ -89,7 +103,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
             closed = true;
             wsRef.current?.close();
         };
-    }, []);
+    }, [flushQueue]);
 
     const api = useMemo<WSContextType>(() => {
         const ready =
@@ -102,8 +116,11 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
                 const s = wsRef.current;
                 if (!s) return;
                 const payload = typeof msg === "string" ? msg : JSON.stringify(msg);
-                if (s.readyState === 1) s.send(payload);
-                else s.addEventListener("open", () => s.send(payload), { once: true });
+                if (s.readyState === WebSocket.OPEN) {
+                    s.send(payload);
+                } else {
+                    sendQueueRef.current.push(payload);
+                }
             },
             on: (type: string, fn: MessageHandler) => {
                 if (!handlers.current.has(type)) handlers.current.set(type, new Set());

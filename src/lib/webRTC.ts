@@ -155,7 +155,7 @@ export function useWebRTC(params: {
 
 
     // ----- consume helper
-    const consumedRef = useRef<Set<string>>(new Set());
+    const consumedRef = useRef<Map<string, string>>(new Map());
 
     const consume = useCallback(async (fromUserId: string, producerId: string) => {
         const device = deviceRef.current;
@@ -166,7 +166,7 @@ export function useWebRTC(params: {
             console.log("⏭️ stale/duplicate producer, skip", producerId);
             return;
         }
-        consumedRef.current.add(producerId);
+        consumedRef.current.set(producerId, fromUserId);
 
         try {
             const res = await request<SfuConsumeResOk>("sfu:consume", {
@@ -256,6 +256,7 @@ export function useWebRTC(params: {
                     delete c[m.userId];
                     return c;
                 });
+                consumedRef.current.delete(m.producerId);
                 return;
             }
 
@@ -268,6 +269,9 @@ export function useWebRTC(params: {
                     delete c[m.userId];
                     return c;
                 });
+                for (const [producerId, ownerId] of consumedRef.current.entries()) {
+                    if (ownerId === m.userId) consumedRef.current.delete(producerId);
+                }
                 return;
             }
         };
@@ -447,12 +451,6 @@ export function useWebRTC(params: {
 
         return () => {
             mounted = false;
-            const isDev = process.env.NODE_ENV === "development";
-            if (isDev) {
-                console.log("🧪 DEV cleanup skipped (StrictMode)");
-                return;
-            }
-
             initKeyRef.current = null;
             sendTransportRef.current?.close();
             recvTransportRef.current?.close();
@@ -462,6 +460,7 @@ export function useWebRTC(params: {
 
             setRemoteStreams({});
             setLocalStream(s => { s?.getTracks().forEach(t => t.stop()); return null; });
+            consumedRef.current.clear();
 
             request<null>("sfu:leave").catch(() => {});
         };
