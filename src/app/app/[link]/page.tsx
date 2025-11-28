@@ -29,7 +29,7 @@ type VideoTileProps = {
     className?: string;
 };
 
-export function VideoTile({
+function VideoTile({
                               stream,
                               title,
                               mutedByDefault = false,
