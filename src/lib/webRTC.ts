@@ -120,6 +120,8 @@ export function useWebRTC(params: {
     const recvTransportRef = useRef<Transport | null>(null);
 
     const pendingRef = useRef<Map<string, Pending<unknown>>>(new Map());
+    const remoteStreamsRef = useRef<Map<string, MediaStream>>(new Map());
+    const pendingNewProducersRef = useRef<Array<{ userId: string; producerId: string; kind?: string }>>([]);
 
     // refs für aktuelle Werte
     const sendRef = useRef(send);
@@ -158,17 +160,39 @@ export function useWebRTC(params: {
     const consumedRef = useRef<Map<string, string>>(new Map());
 
     const consume = useCallback(async (fromUserId: string, producerId: string) => {
+        console.log("🎯🎯🎯 consume() CALLED", { fromUserId, producerId, stack: new Error().stack });
         const device = deviceRef.current;
         const recvTransport = recvTransportRef.current;
-        if (!device || !recvTransport) return;
-
-        if (consumedRef.current.has(producerId)) {
-            console.log("⏭️ stale/duplicate producer, skip", producerId);
+        console.log("🔍 consume() device/transport check", { 
+            device: !!device, 
+            recvTransport: !!recvTransport,
+            deviceRtpCapabilities: device?.rtpCapabilities ? "present" : "missing",
+            recvTransportId: recvTransport?.id,
+        });
+        if (!device || !recvTransport) {
+            console.warn("⚠️⚠️⚠️ consume() EARLY RETURN: device or recvTransport missing", { device: !!device, recvTransport: !!recvTransport });
             return;
         }
-        consumedRef.current.set(producerId, fromUserId);
+
+        // WICHTIG: Prüfe ob bereits konsumiert, aber setze consumedRef erst NACH erfolgreichem Consumer erstellen
+        if (consumedRef.current.has(producerId)) {
+            console.log("⏭️ stale/duplicate producer, skip", producerId, "already consumed for", consumedRef.current.get(producerId));
+            return;
+        }
+        
+        console.log("✅ consume() proceeding", { fromUserId, producerId });
 
         try {
+            // WICHTIG: Stelle sicher, dass der Transport verbunden ist, bevor wir consume() aufrufen
+            // In Mediasoup verbindet sich der Transport automatisch, wenn consume() aufgerufen wird,
+            // aber manchmal muss man explizit warten, bis der Transport bereit ist
+            if (recvTransport.connectionState === "new" || recvTransport.connectionState === "connecting") {
+                console.log("⏳ recvTransport not ready for consume, waiting for connection...", recvTransport.connectionState);
+                // Der Transport sollte sich automatisch verbinden, wenn consume() aufgerufen wird
+                // Aber wir warten kurz, damit ICE-Kandidaten gesammelt werden können
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+            
             const res = await request<SfuConsumeResOk>("sfu:consume", {
                 transportId: recvTransport.id,
                 producerId,
@@ -181,18 +205,252 @@ export function useWebRTC(params: {
                 kind: res.kind,
                 rtpParameters: res.rtpParameters,
             });
-
-            setRemoteStreams(prev => {
-                const old = prev[fromUserId];
-                const newStream = new MediaStream(old ? old.getTracks() : []);
-                for (const t of newStream.getTracks()) {
-                    if (t.kind === consumer.track.kind) newStream.removeTrack(t);
-                }
-                newStream.addTrack(consumer.track);
-                return { ...prev, [fromUserId]: newStream };
+            
+            // WICHTIG: Setze consumedRef erst NACH erfolgreichem Consumer erstellen
+            consumedRef.current.set(producerId, fromUserId);
+            console.log("✅ Consumer created, marked as consumed", { producerId, fromUserId });
+            
+            // Nach consume() sollte der Transport sich verbinden
+            console.log("🔍 Transport state after consume()", {
+                connectionState: recvTransport.connectionState,
+                iceState: (recvTransport as any).iceState,
+            });
+            
+            // Warte, bis der Transport sich verbindet (falls er sich noch nicht verbunden hat)
+            if (recvTransport.connectionState !== "connected") {
+                console.log("⏳ Waiting for transport to connect after consume()...", recvTransport.connectionState);
+                await new Promise<void>((resolve) => {
+                    const timeout = setTimeout(() => {
+                        console.warn("⚠️ Transport did not connect after consume() within 3s", recvTransport.connectionState);
+                        resolve();
+                    }, 3000);
+                    
+                    const handler = (state: string) => {
+                        console.log("🔄 Transport connection state changed after consume()", state);
+                        if (state === "connected") {
+                            clearTimeout(timeout);
+                            recvTransport.off("connectionstatechange", handler);
+                            resolve();
+                        } else if (state === "failed" || state === "disconnected" || state === "closed") {
+                            clearTimeout(timeout);
+                            recvTransport.off("connectionstatechange", handler);
+                            console.error("❌ Transport connection failed after consume()", state);
+                            resolve();
+                        }
+                    };
+                    
+                    recvTransport.on("connectionstatechange", handler);
+                    
+                    // Prüfe nochmal, falls es sich zwischenzeitlich geändert hat
+                    if (recvTransport.connectionState === "connected") {
+                        clearTimeout(timeout);
+                        recvTransport.off("connectionstatechange", handler);
+                        resolve();
+                    }
+                });
+            }
+            
+            console.log("✅ Transport ready for track", {
+                connectionState: recvTransport.connectionState,
             });
 
+            const track = consumer.track;
+            
+            // Stelle sicher, dass der Track enabled ist
+            if (!track.enabled) {
+                track.enabled = true;
+                console.log("🔧 Track was disabled, enabled it", { kind: track.kind, producerId });
+            }
+            
+            console.log("🎬 Consumer track created", {
+                kind: track.kind,
+                id: track.id,
+                muted: track.muted,
+                readyState: track.readyState,
+                enabled: track.enabled,
+                fromUserId,
+                producerId,
+            });
+
+            // Resume consumer auf Server und Client
             await request<null>("sfu:resume-consumer", { consumerId: consumer.id });
+
+            try {
+                await consumer.resume();
+                console.log("✅ Consumer resumed", { 
+                    kind: track.kind, 
+                    producerId,
+                    consumerPaused: consumer.paused,
+                    trackMuted: track.muted,
+                    trackEnabled: track.enabled,
+                    trackReadyState: track.readyState,
+                });
+            } catch (err) {
+                console.warn("⚠️ Consumer resume failed", err);
+            }
+            
+            // Prüfe Transport-Status
+            console.log("🔍 Transport status", {
+                recvTransportId: recvTransport.id,
+                recvTransportConnectionState: recvTransport.connectionState,
+                recvTransportState: (recvTransport as any).state,
+            });
+            
+            // WICHTIG: Warte, bis der Transport verbunden ist, bevor wir den Track hinzufügen
+            if (recvTransport.connectionState !== "connected") {
+                console.log("⏳ Transport not connected yet, waiting...", recvTransport.connectionState);
+                
+                // Warte auf connectionstatechange Event
+                await new Promise<void>((resolve) => {
+                    const timeout = setTimeout(() => {
+                        console.warn("⚠️ Transport connection timeout after 5s", recvTransport.connectionState);
+                        resolve();
+                    }, 5000);
+                    
+                    const handler = (state: string) => {
+                        console.log("🔄 Transport connection state changed", state);
+                        if (state === "connected") {
+                            clearTimeout(timeout);
+                            recvTransport.off("connectionstatechange", handler);
+                            resolve();
+                        }
+                    };
+                    
+                    recvTransport.on("connectionstatechange", handler);
+                    
+                    // Prüfe nochmal, falls es sich zwischenzeitlich geändert hat
+                    if (recvTransport.connectionState === "connected") {
+                        clearTimeout(timeout);
+                        recvTransport.off("connectionstatechange", handler);
+                        resolve();
+                    }
+                });
+            }
+            
+            console.log("✅ Transport connection state", recvTransport.connectionState);
+            
+            // Warte kurz, damit der Track Zeit hat, Frames zu empfangen
+            await new Promise(resolve => setTimeout(resolve, 300));
+            
+            // Prüfe nochmal den Track-Status
+            console.log("🔍 Track status after resume and transport wait", {
+                kind: track.kind,
+                muted: track.muted,
+                enabled: track.enabled,
+                readyState: track.readyState,
+                consumerPaused: consumer.paused,
+                transportState: recvTransport.connectionState,
+            });
+
+            const applyTrack = () => {
+                let managedStream = remoteStreamsRef.current.get(fromUserId);
+                if (!managedStream) {
+                    managedStream = new MediaStream();
+                    remoteStreamsRef.current.set(fromUserId, managedStream);
+                }
+
+                const existing = managedStream.getTracks().filter((t) => t.kind === track.kind);
+                for (const existingTrack of existing) {
+                    managedStream.removeTrack(existingTrack);
+                    try {
+                        existingTrack.stop();
+                    } catch {
+                        // ignore
+                    }
+                }
+
+                managedStream.addTrack(track);
+                
+                // Stelle sicher, dass der Track wirklich unmuted ist
+                // WICHTIG: Mediasoup-Tracks können initial gemuted sein, bis der Transport verbunden ist
+                if (track.muted) {
+                    console.warn("⚠️ Track is muted after adding to stream", { 
+                        kind: track.kind, 
+                        producerId,
+                        transportState: recvTransport.connectionState,
+                    });
+                    // Track.muted ist read-only, wir können es nicht direkt setzen
+                    // Es sollte automatisch unmuten, wenn der Transport verbunden ist und Frames ankommen
+                    
+                    // Setze einen Listener, der den Stream aktualisiert, wenn der Track unmuted wird
+                    track.onunmute = () => {
+                        console.log("🔊 Track unmuted after transport connection!", { kind: track.kind, producerId });
+                        track.onunmute = null;
+                        // Aktualisiere den Stream, um React zu triggern
+                        const currentStream = remoteStreamsRef.current.get(fromUserId);
+                        if (currentStream) {
+                            const uiStream = new MediaStream(currentStream.getTracks());
+                            setRemoteStreams((prev) => ({
+                                ...prev,
+                                [fromUserId]: uiStream,
+                            }));
+                        }
+                    };
+                }
+                
+                console.log("➕ Track added to stream", {
+                    kind: track.kind,
+                    trackId: track.id,
+                    trackMuted: track.muted,
+                    trackEnabled: track.enabled,
+                    trackReadyState: track.readyState,
+                    streamTracks: managedStream.getTracks().map(t => ({ kind: t.kind, id: t.id, muted: t.muted, readyState: t.readyState })),
+                });
+
+                // Clone stream für React state update
+                const uiStream = new MediaStream(managedStream.getTracks());
+                
+                // Prüfe nochmal nach dem Klonen
+                const clonedTracks = uiStream.getTracks();
+                for (const t of clonedTracks) {
+                    if (t.id === track.id && t.muted) {
+                        console.warn("⚠️ Track is muted in cloned stream!", { kind: t.kind, id: t.id });
+                    }
+                }
+                
+                console.log("🔄 Updating remoteStreams state", {
+                    fromUserId,
+                    trackCount: uiStream.getTracks().length,
+                    tracks: uiStream.getTracks().map(t => ({ kind: t.kind, id: t.id, muted: t.muted, enabled: t.enabled, readyState: t.readyState })),
+                });
+                setRemoteStreams((prev) => {
+                    const next = {
+                        ...prev,
+                        [fromUserId]: uiStream,
+                    };
+                    console.log("📊 remoteStreams state after update:", Object.keys(next));
+                    return next;
+                });
+            };
+
+            // Warte auf unmute, wenn der Track gemuted ist
+            if (track.muted) {
+                console.log("⏳ Track is muted, waiting for unmute...", { kind: track.kind, producerId });
+                let applied = false;
+                track.onunmute = () => {
+                    console.log("🔊 Track unmuted!", { kind: track.kind, producerId, readyState: track.readyState });
+                    track.onunmute = null;
+                    if (!applied) {
+                        applied = true;
+                        applyTrack();
+                    }
+                };
+                // Fallback: Wenn nach 3 Sekunden immer noch gemuted, trotzdem hinzufügen
+                setTimeout(() => {
+                    if (!applied) {
+                        const stream = remoteStreamsRef.current.get(fromUserId);
+                        const alreadyAdded = stream?.getTracks().some(t => t.id === track.id);
+                        if (!alreadyAdded) {
+                            console.warn("⚠️ Track still muted after 3s, applying anyway", { kind: track.kind, producerId, muted: track.muted });
+                            applied = true;
+                            applyTrack();
+                        }
+                    }
+                }, 3000);
+            } else {
+                console.log("✅ Track not muted, applying immediately", { kind: track.kind, producerId });
+                applyTrack();
+            }
         } catch (e) {
             consumedRef.current.delete(producerId);
             if (String(e).includes("cannot-consume")) {
@@ -202,6 +460,37 @@ export function useWebRTC(params: {
             throw e;
         }
     }, [request]);
+    
+    // Verarbeite pending new-producer Nachrichten
+    const processPendingNewProducers = useCallback(async () => {
+        if (!deviceRef.current || !recvTransportRef.current) return;
+        
+        const queue = pendingNewProducersRef.current;
+        if (queue.length === 0) return;
+        
+        console.log("🔄 Processing pending new-producers queue", queue.length);
+        const toProcess = [...queue];
+        pendingNewProducersRef.current = [];
+        
+        for (const item of toProcess) {
+            // WICHTIG: Prüfe ob bereits konsumiert, bevor wir consume() aufrufen
+            if (consumedRef.current.has(item.producerId)) {
+                console.log("⏭️ Pending producer already consumed, skipping", {
+                    producerId: item.producerId,
+                    userId: item.userId,
+                    consumedFor: consumedRef.current.get(item.producerId),
+                });
+                continue;
+            }
+            
+            try {
+                await consume(item.userId, item.producerId);
+                console.log("✅ Processed pending producer", { producerId: item.producerId, userId: item.userId });
+            } catch (err) {
+                console.error("❌ Failed to process pending new-producer", item, err);
+            }
+        }
+    }, [consume]);
 
     // ----- WS listener
     useEffect(() => {
@@ -216,8 +505,13 @@ export function useWebRTC(params: {
             if (!hasType(msgUnknown)) return;
             const msg = msgUnknown as IncomingMsg;
 
-            // 🔥 INCOMING LOG (drosselbar, wenn’s zu viel is)
-            console.log("⬅️ WS msg", msg);
+            // 🔥 INCOMING LOG (drosselbar, wenn's zu viel is)
+            console.log("⬅️⬅️⬅️ WS msg", msg.type, msg);
+            
+            // Spezielles Logging für wichtige Nachrichten
+            if (msg.type === "sfu:new-producer" || msg.type === "sfu:peer-joined" || msg.type === "sfu:producer-closed" || msg.type === "sfu:peer-left") {
+                console.log("🔥🔥🔥 IMPORTANT SFU EVENT:", msg.type, JSON.stringify(msg, null, 2));
+            }
 
             if (msg.type === "sfu:response") {
                 const r = msg as SfuResponseMsg<unknown>;
@@ -242,8 +536,55 @@ export function useWebRTC(params: {
 
             if (msg.type === "sfu:new-producer") {
                 const m = msg as SfuNewProducerMsg;
-                console.log("📥 new-producer", { from: m.userId, producerId: m.producerId });
-                await consume(m.userId, m.producerId);
+                console.log("📥📥📥 NEW-PRODUCER MESSAGE RECEIVED", { 
+                    from: m.userId, 
+                    producerId: m.producerId, 
+                    kind: (msg as any).kind,
+                    fullMsg: msg,
+                });
+                
+                // WICHTIG: Prüfe ob bereits konsumiert, bevor wir etwas tun
+                if (consumedRef.current.has(m.producerId)) {
+                    console.log("⏭️ Producer already consumed, skipping", {
+                        producerId: m.producerId,
+                        userId: m.userId,
+                        consumedFor: consumedRef.current.get(m.producerId),
+                    });
+                    return;
+                }
+                
+                // Prüfe ob recvTransport bereit ist
+                if (!deviceRef.current || !recvTransportRef.current) {
+                    console.log("⏳ recvTransport not ready yet, queuing new-producer", {
+                        device: !!deviceRef.current,
+                        recvTransport: !!recvTransportRef.current,
+                    });
+                    // WICHTIG: Prüfe nochmal, ob nicht bereits in der Queue
+                    const alreadyQueued = pendingNewProducersRef.current.some(
+                        p => p.producerId === m.producerId
+                    );
+                    if (!alreadyQueued) {
+                        pendingNewProducersRef.current.push({
+                            userId: m.userId,
+                            producerId: m.producerId,
+                            kind: (msg as any).kind,
+                        });
+                    } else {
+                        console.log("⏭️ Producer already in queue, skipping", { producerId: m.producerId });
+                    }
+                    return;
+                }
+                
+                console.log("🔍 About to call consume()", {
+                    device: !!deviceRef.current,
+                    recvTransport: !!recvTransportRef.current,
+                });
+                try {
+                    await consume(m.userId, m.producerId);
+                    console.log("✅✅✅ consume completed for", { from: m.userId, producerId: m.producerId });
+                } catch (err) {
+                    console.error("❌❌❌ consume failed for", { from: m.userId, producerId: m.producerId }, err);
+                }
                 return;
             }
 
@@ -251,12 +592,44 @@ export function useWebRTC(params: {
                 const m = msg as SfuProducerClosedMsg;
                 console.log("🛑 producer-closed", m);
 
-                setRemoteStreams((prev) => {
-                    const c = { ...prev };
-                    delete c[m.userId];
-                    return c;
-                });
+                const managedStream = remoteStreamsRef.current.get(m.userId);
+                if (managedStream) {
+                    const toRemove = managedStream.getTracks().filter((track) =>
+                        m.kind ? track.kind === m.kind : true
+                    );
+                    for (const track of toRemove) {
+                        managedStream.removeTrack(track);
+                        try {
+                            track.stop();
+                        } catch {
+                            // ignore
+                        }
+                    }
+
+                    if (managedStream.getTracks().length === 0) {
+                        remoteStreamsRef.current.delete(m.userId);
+                        setRemoteStreams((prev) => {
+                            if (!prev[m.userId]) return prev;
+                            const next = { ...prev };
+                            delete next[m.userId];
+                            return next;
+                        });
+                    } else {
+                        const uiStream = new MediaStream(managedStream.getTracks());
+                        setRemoteStreams((prev) => ({
+                            ...prev,
+                            [m.userId]: uiStream,
+                        }));
+                    }
+                }
+
                 consumedRef.current.delete(m.producerId);
+                return;
+            }
+
+            if (msg.type === "sfu:peer-joined") {
+                const m = msg as { type: "sfu:peer-joined"; userId: string };
+                console.log("👋👋👋 PEER-JOINED", m.userId, "but not consuming yet - waiting for sfu:new-producer");
                 return;
             }
 
@@ -264,10 +637,23 @@ export function useWebRTC(params: {
                 const m = msg as SfuPeerLeftMsg;
                 console.log("👋 peer-left", m.userId);
 
+                const stream = remoteStreamsRef.current.get(m.userId);
+                if (stream) {
+                    stream.getTracks().forEach((track) => {
+                        try {
+                            track.stop();
+                        } catch {
+                            // ignore
+                        }
+                    });
+                    remoteStreamsRef.current.delete(m.userId);
+                }
+
                 setRemoteStreams((prev) => {
-                    const c = { ...prev };
-                    delete c[m.userId];
-                    return c;
+                    if (!prev[m.userId]) return prev;
+                    const next = { ...prev };
+                    delete next[m.userId];
+                    return next;
                 });
                 for (const [producerId, ownerId] of consumedRef.current.entries()) {
                     if (ownerId === m.userId) consumedRef.current.delete(producerId);
@@ -333,14 +719,27 @@ export function useWebRTC(params: {
             );
 
             recvTransport.on("connect", ({ dtlsParameters }, cb, errCb) => {
-                console.log("🟦 recvTransport connect() → sending DTLS");
+                console.log("🟦 recvTransport connect() → sending DTLS", {
+                    transportId: recvTransport.id,
+                    connectionState: recvTransport.connectionState,
+                });
                 request<null>("sfu:connect-transport", {
                     transportId: recvTransport.id,
                     dtlsParameters: dtlsParameters as DtlsParameters,
                 })
                     .then(() => {
-                        console.log("🟦 recvTransport DTLS OK");
+                        console.log("🟦 recvTransport DTLS OK", {
+                            transportId: recvTransport.id,
+                            connectionState: recvTransport.connectionState,
+                        });
                         cb();
+                        // Prüfe den Status nach dem Callback
+                        setTimeout(() => {
+                            console.log("🔍 recvTransport state after DTLS callback", {
+                                transportId: recvTransport.id,
+                                connectionState: recvTransport.connectionState,
+                            });
+                        }, 100);
                     })
                     .catch((e) => {
                         console.error("🟥 recvTransport DTLS FAIL", e);
@@ -349,6 +748,19 @@ export function useWebRTC(params: {
             });
 
             recvTransportRef.current = recvTransport;
+            
+            // WICHTIG: Versuche den recvTransport zu verbinden, falls er sich nicht automatisch verbindet
+            // In Mediasoup verbindet sich der Transport normalerweise automatisch, wenn consume() aufgerufen wird,
+            // aber manchmal muss man explizit connect() aufrufen
+            if (recvTransport.connectionState === "new") {
+                console.log("🔌 recvTransport is 'new', attempting to trigger connection...");
+                // Der Transport sollte sich automatisch verbinden, wenn consume() aufgerufen wird
+                // Aber wir können auch explizit versuchen, ihn zu verbinden
+                // (Mediasoup verbindet sich automatisch, wenn nötig)
+            }
+            
+            // Verarbeite alle pending new-producer Nachrichten, die vorher ankamen
+            await processPendingNewProducers();
 
             // 3) send transport + local media
             if (wantSend) {
@@ -410,7 +822,7 @@ export function useWebRTC(params: {
 
                 let stream: MediaStream | null = null;
                 try {
-                    stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+                    stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
                     console.log("✅ getUserMedia OK", stream.getTracks().map((t) => t.kind));
                 } catch (e) {
                     console.error("❌ getUserMedia failed:", e);
@@ -441,10 +853,28 @@ export function useWebRTC(params: {
             }
 
             // 4) existierende Producer consummen
+            console.log("📋 Processing existingProducers", {
+                count: joinRes.existingProducers.length,
+                producers: joinRes.existingProducers,
+                device: !!deviceRef.current,
+                recvTransport: !!recvTransportRef.current,
+            });
             for (const p of joinRes.existingProducers) {
                 console.log("⏳ consuming existing producer", p);
-                await consume(p.userId, p.producerId);
+                try {
+                    await consume(p.userId, p.producerId);
+                    console.log("✅ consumed existing producer", p);
+                } catch (err) {
+                    console.error("❌ failed to consume existing producer", p, err);
+                }
             }
+            console.log("✅ Finished processing existingProducers", {
+                consumedCount: consumedRef.current.size,
+                consumed: Array.from(consumedRef.current.entries()),
+            });
+            
+            // Verarbeite nochmal alle pending new-producer Nachrichten (falls welche dazwischen kamen)
+            await processPendingNewProducers();
         })().catch((e) => {
             console.error("SFU init failed:", e);
         });
@@ -458,13 +888,143 @@ export function useWebRTC(params: {
             recvTransportRef.current = null;
             deviceRef.current = null;
 
+            remoteStreamsRef.current.forEach((stream) => {
+                stream.getTracks().forEach((track) => {
+                    try {
+                        track.stop();
+                    } catch {
+                        // ignore
+                    }
+                });
+            });
+            remoteStreamsRef.current.clear();
+
             setRemoteStreams({});
             setLocalStream(s => { s?.getTracks().forEach(t => t.stop()); return null; });
             consumedRef.current.clear();
+            pendingNewProducersRef.current = [];
 
             request<null>("sfu:leave").catch(() => {});
         };
-    }, [userId, conferenceId, role, consume, request]);
+    }, [userId, conferenceId, role, consume, request, processPendingNewProducers]);
 
-    return { localStream, remoteStreams };
+    // 🔍 DIAGNOSE: Funktion zum Debuggen - kann in Browser-Konsole aufgerufen werden
+    const diagnose = useCallback(async () => {
+        const report: any = {
+            timestamp: new Date().toISOString(),
+            device: deviceRef.current ? {
+                loaded: true,
+                rtpCapabilities: deviceRef.current.rtpCapabilities ? "present" : "missing",
+            } : { loaded: false },
+            transports: {},
+            remoteStreams: {},
+        };
+
+        // Recv Transport
+        const recvTransport = recvTransportRef.current;
+        if (recvTransport) {
+            try {
+                const stats = await recvTransport.getStats();
+                report.transports.recv = {
+                    id: recvTransport.id,
+                    connectionState: recvTransport.connectionState,
+                    iceState: (recvTransport as any).iceState,
+                    iceSelectedTuple: (recvTransport as any).iceSelectedTuple,
+                    dtlsState: (recvTransport as any).dtlsState,
+                    stats: stats,
+                };
+            } catch (e) {
+                report.transports.recv = { error: String(e) };
+            }
+        } else {
+            report.transports.recv = { error: "not initialized" };
+        }
+
+        // Send Transport
+        const sendTransport = sendTransportRef.current;
+        if (sendTransport) {
+            try {
+                const stats = await sendTransport.getStats();
+                report.transports.send = {
+                    id: sendTransport.id,
+                    connectionState: sendTransport.connectionState,
+                    iceState: (sendTransport as any).iceState,
+                    iceSelectedTuple: (sendTransport as any).iceSelectedTuple,
+                    dtlsState: (sendTransport as any).dtlsState,
+                    stats: stats,
+                };
+            } catch (e) {
+                report.transports.send = { error: String(e) };
+            }
+        } else {
+            report.transports.send = { error: "not initialized" };
+        }
+
+        // Remote Streams
+        for (const [userId, stream] of Object.entries(remoteStreams)) {
+            const tracks = stream.getTracks();
+            report.remoteStreams[userId] = {
+                streamId: stream.id,
+                trackCount: tracks.length,
+                tracks: tracks.map(track => ({
+                    id: track.id,
+                    kind: track.kind,
+                    enabled: track.enabled,
+                    muted: track.muted,
+                    readyState: track.readyState,
+                })),
+            };
+        }
+
+        console.group("🔍 WebRTC DIAGNOSE REPORT");
+        console.log("📊 Full Report:", report);
+        
+        // Kritische Checks
+        console.group("🚨 CRITICAL CHECKS");
+        if (recvTransport) {
+            if (recvTransport.connectionState !== "connected") {
+                console.error("❌ recvTransport NOT CONNECTED:", recvTransport.connectionState);
+            } else {
+                console.log("✅ recvTransport is connected");
+            }
+            
+            if ((recvTransport as any).dtlsState !== "connected") {
+                console.error("❌ recvTransport DTLS NOT CONNECTED:", (recvTransport as any).dtlsState);
+            } else {
+                console.log("✅ recvTransport DTLS is connected");
+            }
+        } else {
+            console.error("❌ recvTransport not initialized");
+        }
+
+        const remoteStreamCount = Object.keys(remoteStreams).length;
+        if (remoteStreamCount === 0) {
+            console.warn("⚠️ No remote streams");
+        } else {
+            console.log(`✅ ${remoteStreamCount} remote stream(s)`);
+        }
+
+        for (const [userId, streamInfo] of Object.entries(report.remoteStreams)) {
+            const videoTracks = (streamInfo as any).tracks.filter((t: any) => t.kind === "video");
+            for (const track of videoTracks) {
+                if (track.muted) {
+                    console.warn(`⚠️ Video track muted for user ${userId}`);
+                }
+                if (track.readyState !== "live") {
+                    console.warn(`⚠️ Video track not live for user ${userId}:`, track.readyState);
+                }
+            }
+        }
+        console.groupEnd();
+        console.groupEnd();
+
+        return report;
+    }, [remoteStreams]);
+
+    // Expose diagnose function globally for console access
+    if (typeof window !== "undefined") {
+        (window as any).webrtcDiagnose = diagnose;
+    }
+
+    return { localStream, remoteStreams, diagnose };
 }

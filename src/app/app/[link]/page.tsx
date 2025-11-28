@@ -37,19 +37,107 @@ export function VideoTile({
                           }: VideoTileProps) {
     const ref = useRef<HTMLVideoElement | null>(null);
     const [muted, setMuted] = useState<boolean>(mutedByDefault);
+    const [needsUserAction, setNeedsUserAction] = useState(false);
+    const isPlayingRef = useRef(false); // Verhindert Unterbrechungen während play()
+    const currentStreamRef = useRef<MediaStream | null>(null);
 
     // falls mutedByDefault sich jemals ändert
     useEffect(() => {
         setMuted(mutedByDefault);
     }, [mutedByDefault]);
 
+    const tryPlay = useCallback(() => {
+        const el = ref.current;
+        if (!el || !stream) return;
+        const playPromise = el.play();
+        if (playPromise) {
+            playPromise
+                .then(() => {
+                    // Prüfe nach kurzer Zeit, ob das Video wirklich spielt
+                    setTimeout(() => {
+                        if (el.paused || el.readyState === 0) {
+                            console.warn("Video paused or not ready after play()", title);
+                            setNeedsUserAction(true);
+                        } else {
+                            setNeedsUserAction(false);
+                        }
+                    }, 500);
+                })
+                .catch((err: DOMException) => {
+                    console.warn("autoplay blocked", title, err.name, err.message);
+                    setNeedsUserAction(true);
+                });
+        } else {
+            // Falls play() undefined zurückgibt, prüfe den Status
+            setTimeout(() => {
+                if (el.paused || el.readyState === 0) {
+                    setNeedsUserAction(true);
+                }
+            }, 500);
+        }
+    }, [title, stream]);
+
+    const handleUserPlay = useCallback(() => {
+        const el = ref.current;
+        if (!el || isPlayingRef.current) return; // Verhindere mehrfache Aufrufe
+        
+        isPlayingRef.current = true;
+        setMuted(false);
+        el.muted = false;
+        
+        const attemptPlay = () => {
+            const playPromise = el.play();
+            if (playPromise) {
+                playPromise
+                    .then(() => {
+                        console.log("✅ Video started after user interaction", title);
+                        setNeedsUserAction(false);
+                        isPlayingRef.current = false;
+                    })
+                    .catch((err: DOMException) => {
+                        // AbortError ignorieren und nochmal versuchen
+                        if (err.name === "AbortError") {
+                            console.warn("⚠️ Play interrupted, retrying...", title);
+                            setTimeout(() => {
+                                if (ref.current && !ref.current.paused) {
+                                    setNeedsUserAction(false);
+                                    isPlayingRef.current = false;
+                                } else if (ref.current) {
+                                    attemptPlay(); // Nochmal versuchen
+                                } else {
+                                    isPlayingRef.current = false;
+                                }
+                            }, 100);
+                        } else {
+                            console.error("❌ Play failed even after user interaction", title, err);
+                            setNeedsUserAction(true);
+                            isPlayingRef.current = false;
+                        }
+                    });
+            } else {
+                isPlayingRef.current = false;
+            }
+        };
+        
+        attemptPlay();
+    }, [title]);
+
     useEffect(() => {
         const el = ref.current;
         if (!el) return;
 
-        // srcObject setzen/clearen
-        el.srcObject = stream;
-        el.muted = mutedByDefault; // autoplay-policy safe
+        // srcObject nur setzen, wenn es sich geändert hat
+        if (currentStreamRef.current !== stream) {
+            currentStreamRef.current = stream;
+            el.srcObject = stream;
+        }
+        
+        el.muted = muted; // autoplay-policy safe
+
+        // Nur play versuchen, wenn nicht gerade ein manueller Play läuft
+        if (!isPlayingRef.current) {
+            tryPlay();
+        }
 
         if (!stream) return;
 
@@ -61,12 +149,7 @@ export function VideoTile({
                 stream.getTracks().map(t => t.kind)
             );
 
-            const p = el.play();
-            if (p) {
-                p.catch((err: DOMException) => {
-                    console.warn("autoplay blocked", title, err.name, err.message);
-                });
-            }
+            tryPlay();
         };
 
         const onAddTrack = (ev: MediaStreamTrackEvent): void => {
@@ -75,33 +158,79 @@ export function VideoTile({
             onMeta();
         };
 
+        const onPlaying = (): void => {
+            console.log("▶️ playing", title);
+            setNeedsUserAction(false);
+        };
+
+        const onPause = (): void => {
+            console.log("⏸️ paused", title);
+            // Nur als needsUserAction markieren, wenn es nicht absichtlich pausiert wurde
+            if (el.readyState > 0 && stream.getTracks().length > 0) {
+                setNeedsUserAction(true);
+            }
+        };
+
         // Handler setzen
         stream.onaddtrack = onAddTrack;
         el.addEventListener("loadedmetadata", onMeta);
+        el.addEventListener("playing", onPlaying);
+        el.addEventListener("pause", onPause);
 
         // falls metadata schon da ist
         if (el.readyState >= 1) onMeta();
 
+        // Prüfe nach kurzer Zeit, ob das Video wirklich spielt
+        const checkTimeout = setTimeout(() => {
+            if (el.paused && el.readyState > 0 && stream.getTracks().length > 0) {
+                console.warn("Video still paused after setup", title);
+                setNeedsUserAction(true);
+            }
+        }, 1000);
+
         return () => {
+            clearTimeout(checkTimeout);
             // Handler entfernen
             stream.onaddtrack = null;
             el.removeEventListener("loadedmetadata", onMeta);
+            el.removeEventListener("playing", onPlaying);
+            el.removeEventListener("pause", onPause);
         };
-    }, [stream, mutedByDefault, title]);
+    }, [stream, mutedByDefault, title, muted, tryPlay]);
+
+    const hasVideo = !!stream?.getVideoTracks().some((t) => t.readyState !== "ended");
+    const hasAudio = !!stream?.getAudioTracks().some((t) => t.readyState !== "ended");
 
     return (
-        <div className="border rounded-md overflow-hidden">
+        <div className="relative border rounded-md overflow-hidden">
             <video
                 ref={ref}
                 autoPlay
                 playsInline
                 muted={muted}
-                className={className}
+                className={`${className} bg-black`}
             />
+            {!hasVideo && (
+                <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground bg-background/80">
+                    Kein Video verfügbar
+                </div>
+            )}
+            {needsUserAction && (
+                <button
+                    className="absolute inset-0 bg-black/80 text-white text-base font-medium flex items-center justify-center z-10 hover:bg-black/90 active:bg-black/95 transition-colors cursor-pointer"
+                    onClick={handleUserPlay}
+                    type="button"
+                >
+                    <div className="text-center">
+                        <div className="text-2xl mb-2">▶️</div>
+                        <div>Tippe zum Abspielen</div>
+                    </div>
+                </button>
+            )}
             <div className="px-2 py-1 text-xs text-muted-foreground flex items-center justify-between">
                 <span className="truncate">{title}</span>
 
-                {!mutedByDefault && (
+                {hasAudio && (
                     <button
                         className="p-1"
                         onClick={() => setMuted(m => !m)}
@@ -114,6 +243,44 @@ export function VideoTile({
         </div>
     );
 }
+
+function DebugRemoteVideo({ stream }: { stream: MediaStream | null }) {
+    const ref = useRef<HTMLVideoElement | null>(null);
+
+    useEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+
+        if (!stream) {
+            el.srcObject = null;
+            return;
+        }
+
+        if (el.srcObject !== stream) {
+            el.srcObject = stream;
+        }
+
+        el.muted = true;
+
+        el.play().catch((err) => {
+            console.warn("Debug video play failed:", err.name, err.message);
+        });
+    }, [stream]);
+
+    return (
+        <div className="border rounded-md m-2 p-1">
+            <div className="text-xs text-muted-foreground mb-1">DEBUG Remote Video</div>
+            <video
+                ref={ref}
+                autoPlay
+                playsInline
+                muted
+                style={{ width: "320px", height: "240px", background: "black" }}
+            />
+        </div>
+    );
+}
+
 
 export default function Page({ params }: { params: Promise<{ link: string }> }) {
     const { link } = use(params);
@@ -132,6 +299,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
     const { socket, send } = useWebSocket();
     const lastInitRef = useRef<string | null>(null);
     const ws = useWS();
+
 
     useEffect(() => {
         const t = setTimeout(() => setShowText(true), 5000);
@@ -265,6 +433,9 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
         role: derivedRole,
     });
 
+    const firstRemoteStream =
+        Object.values(remoteStreams)[0] ?? null;
+
     useEffect(() => {
         console.log(
             "REMOTE STREAMS",
@@ -275,6 +446,77 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                 ])
             )
         );
+    }, [remoteStreams]);
+
+    // 🔍 DEBUG: Detaillierte Video- und Stream-Analyse
+    useEffect(() => {
+        const debugInterval = setInterval(() => {
+            const videos = document.querySelectorAll("video");
+            console.group("🔍 VIDEO DEBUG REPORT");
+            
+            videos.forEach((video, idx) => {
+                const stream = video.srcObject as MediaStream | null;
+                const tracks = stream?.getTracks() || [];
+                
+                console.group(`Video ${idx + 1} (${video.title || "no title"})`);
+                console.log("Element:", {
+                    paused: video.paused,
+                    muted: video.muted,
+                    readyState: video.readyState,
+                    videoWidth: video.videoWidth,
+                    videoHeight: video.videoHeight,
+                    currentTime: video.currentTime,
+                    autoplay: video.autoplay,
+                    playsInline: video.playsInline,
+                });
+                
+                if (stream) {
+                    console.log("Stream:", {
+                        id: stream.id,
+                        active: stream.active,
+                        trackCount: tracks.length,
+                    });
+                    
+                    tracks.forEach((track, trackIdx) => {
+                        console.log(`Track ${trackIdx + 1} (${track.kind}):`, {
+                            id: track.id,
+                            enabled: track.enabled,
+                            muted: track.muted,
+                            readyState: track.readyState,
+                            settings: track.getSettings ? track.getSettings() : "N/A",
+                            constraints: track.getConstraints ? track.getConstraints() : "N/A",
+                        });
+                        
+                        // Prüfe ob Video-Track wirklich Frames liefert
+                        if (track.kind === "video") {
+                            const stats = (track as any).getStats ? (track as any).getStats() : null;
+                            if (stats) {
+                                console.log("Video Track Stats:", stats);
+                            }
+                        }
+                    });
+                } else {
+                    console.warn("⚠️ No srcObject set!");
+                }
+                console.groupEnd();
+            });
+            
+            console.log("Remote Streams State:", Object.keys(remoteStreams).map(userId => ({
+                userId,
+                stream: remoteStreams[userId],
+                tracks: remoteStreams[userId]?.getTracks().map(t => ({
+                    kind: t.kind,
+                    id: t.id,
+                    enabled: t.enabled,
+                    muted: t.muted,
+                    readyState: t.readyState,
+                })),
+            })));
+            
+            console.groupEnd();
+        }, 5000); // Alle 5 Sekunden
+        
+        return () => clearInterval(debugInterval);
     }, [remoteStreams]);
 
 
