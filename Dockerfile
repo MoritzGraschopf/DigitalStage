@@ -1,6 +1,10 @@
 # 1. Build Stage
 FROM node:24-alpine AS builder
 
+# ⬇️ NEU: Alles, was mediasoup zum Bauen braucht
+RUN apk add --no-cache python3 py3-pip make g++ linux-headers \
+    && ln -sf /usr/bin/python3 /usr/bin/python
+
 WORKDIR /app
 
 # Nur was nötig ist, um Prisma und Node Modules zu installieren

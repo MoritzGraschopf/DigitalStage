@@ -44,3 +44,6 @@ next-env.d.ts
 .idea
 
 /src/generated/prisma
+.cursor
+
+# hell yeah
