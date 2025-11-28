@@ -22,11 +22,11 @@ jobs:
 
       - name: Validate docker compose config
         run: |
-          docker compose -f docker-compose.yml config
+          docker compose -f docker-compose.yaml config
 
       - name: Build images
         run: |
-          docker compose -f docker-compose.yml build
+          docker compose -f docker-compose.yaml build
   
 
   deploy:
