@@ -1,8 +1,6 @@
 services:
     app:
-        build:
-            context: .
-            dockerfile: Dockerfile
+        image: registry.digitalstage.liveroom.at/digitalstage-app:latest
         container_name: digitalStageApp
         ports:
             - '3000:3000'
@@ -16,9 +14,7 @@ services:
         command: sh -c "npx prisma migrate deploy && npm start"
 
     websocket:
-        build:
-            context: .
-            dockerfile: Dockerfile.ws
+        image: registry.digitalstage.liveroom.at/digitalstage-websocket:latest
         container_name: digitalStageSocket
         depends_on:
             - db

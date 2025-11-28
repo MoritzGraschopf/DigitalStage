@@ -1,0 +1,3 @@
+registry.digitalstage.liveroom.at {
+    reverse_proxy registry:5000
+}
