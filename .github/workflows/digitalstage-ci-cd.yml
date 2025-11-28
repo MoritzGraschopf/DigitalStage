@@ -1,0 +1,80 @@
+name: DigitalStage CI/CD
+
+on:
+  push:
+    branches: [ "main" ]          # nach Merge in main → Test + Deploy
+  pull_request:
+    branches: [ "main" ]          # PR gegen main → nur testen
+
+jobs:
+  test-compose:
+    name: Test Docker Compose
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install Docker & Docker Compose (falls nötig)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y docker.io docker-compose-plugin
+
+      # 1. Compose-Syntax prüfen
+      - name: Validate docker compose config
+        run: |
+          docker compose -f docker-compose.yml config
+
+      # 2. Images bauen (checkt, ob Dockerfiles ok sind)
+      - name: Build images
+        run: |
+          docker compose -f docker-compose.yml build
+
+  deploy:
+    name: Deploy to Debian Server
+    needs: test-compose
+    runs-on: ubuntu-latest
+
+    # WICHTIG: nur bei Push, nicht bei Pull Request
+    if: github.event_name == 'push'
+
+    steps:
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf "Host server\n  HostName %s\n  User %s\n  IdentityFile ~/.ssh/id_ed25519\n  StrictHostKeyChecking no\n" \
+            "${{ secrets.SERVER_HOST }}" "${{ secrets.SERVER_USER }}" >> ~/.ssh/config
+
+      - name: Deploy via SSH (git pull + .env schreiben + docker compose up)
+        run: |
+          ssh server << 'EOF'
+          set -e
+
+          cd /opt/digitalstage
+
+          echo ">>> Pulling latest main..."
+          git fetch origin
+          git reset --hard origin/main
+
+          echo ">>> Rewriting .env from GitHub Secrets..."
+          cat > .env << 'ENVEOF'
+          DATABASE_URL=${{ secrets.DATABASE_URL }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          NEXT_PUBLIC_WS_URL=${{ secrets.NEXT_PUBLIC_WS_URL }}
+          NEXT_PUBLIC_STUN_URL=${{ secrets.NEXT_PUBLIC_STUN_URL }}
+          ANNOUNCED_IP=${{ secrets.ANNOUNCED_IP }}
+          MEDIASOUP_MIN_PORT=${{ secrets.MEDIASOUP_MIN_PORT }}
+          MEDIASOUP_MAX_PORT=${{ secrets.MEDIASOUP_MAX_PORT }}
+          MEDIASOUP_LISTEN_IP=${{ secrets.MEDIASOUP_LISTEN_IP }}
+          NODE_ENV=${{ secrets.NODE_ENV }}
+          ENVEOF
+
+          chmod 600 .env
+
+          echo ">>> Starting docker compose..."
+          docker compose up -d --build
+
+          echo ">>> Done."
+          EOF
