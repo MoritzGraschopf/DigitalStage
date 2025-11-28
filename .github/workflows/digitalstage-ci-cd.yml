@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ "main" ]
 
+env:
+  REGISTRY: registry.digitalstage.liveroom.at
+  APP_IMAGE: registry.digitalstage.liveroom.at/digitalstage-app
+  WS_IMAGE: registry.digitalstage.liveroom.at/digitalstage-websocket
+
 jobs:
   test:
     name: Test (Next.js + Compose Config)
@@ -37,26 +42,54 @@ jobs:
           NODE_ENV=${{ secrets.NODE_ENV }}
           ENVEOF
 
-      # ✅ Nur Syntax der Compose-Datei prüfen (sehr schnell)
       - name: Validate docker compose config
         run: docker compose -f docker-compose.yaml config
 
-      # ✅ Next.js App normal builden (ohne Docker)
       - name: Install app deps
         run: npm ci
 
       - name: Build app
         run: npm run build
 
-      # (Optional) Websocket minimal checken, wenn du magst:
-      # - name: Check websocket syntax
-      #   run: node --check path/zur/deiner/websocket.mjs
+  build-and-push:
+    name: Build & Push Images to Private Registry
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Login to registry
+        run: |
+          echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login ${{ env.REGISTRY }} \
+            -u "${{ secrets.REGISTRY_USER }}" --password-stdin
+
+      - name: Build app image
+        run: |
+          docker build \
+            -f Dockerfile \
+            -t $APP_IMAGE:latest \
+            .
+
+      - name: Build websocket image
+        run: |
+          docker build \
+            -f Dockerfile.ws \
+            -t $WS_IMAGE:latest \
+            .
+
+      - name: Push images
+        run: |
+          docker push $APP_IMAGE:latest
+          docker push $WS_IMAGE:latest
 
   deploy:
     name: Deploy to Debian Server
-    needs: test
+    needs: build-and-push
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'   # nur bei Push auf main
+    if: github.event_name == 'push'
 
     steps:
       - name: Setup SSH key
@@ -67,15 +100,11 @@ jobs:
           printf "Host server\n  HostName %s\n  User %s\n  IdentityFile ~/.ssh/id_ed25519\n  StrictHostKeyChecking no\n" \
             "${{ secrets.SERVER_HOST }}" "${{ secrets.SERVER_USER }}" >> ~/.ssh/config
 
-      - name: Deploy via SSH (git pull + .env schreiben + docker compose up)
+      - name: Deploy via SSH (docker compose pull + up)
         run: |
           ssh server << 'EOF'
           set -e
           cd /opt/digitalstage
-
-          echo ">>> Pulling latest main..."
-          git fetch origin
-          git reset --hard origin/main
 
           echo ">>> Rewriting .env from GitHub Secrets..."
           cat > .env << 'ENVEOF'
@@ -92,8 +121,11 @@ jobs:
 
           chmod 600 .env
 
-          echo ">>> Building & starting containers on server..."
-          docker compose -f docker-compose.yaml up -d --build
+          echo ">>> Pulling latest images..."
+          docker compose -f docker-compose.yaml pull
+
+          echo ">>> Starting containers..."
+          docker compose -f docker-compose.yaml up -d
 
           echo ">>> Done."
           EOF
