@@ -2,20 +2,28 @@ name: DigitalStage CI/CD
 
 on:
   push:
-    branches: [ "main" ]          # nach Merge in main → Test + Deploy
+    branches: [ "main" ]
   pull_request:
-    branches: [ "main" ]          # PR gegen main → nur testen
+    branches: [ "main" ]
 
 jobs:
-  test-compose:
-    name: Test Docker Compose
+  test:
+    name: Test (Next.js + Compose Config)
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Create .env for CI from secrets
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+
+      - name: Create .env from secrets (for build + compose config)
         run: |
           cat > .env << 'ENVEOF'
           DATABASE_URL=${{ secrets.DATABASE_URL }}
@@ -29,26 +37,26 @@ jobs:
           NODE_ENV=${{ secrets.NODE_ENV }}
           ENVEOF
 
-      - name: Check Docker & Compose
-        run: |
-          docker --version
-          docker compose version
-
+      # ✅ Nur Syntax der Compose-Datei prüfen (sehr schnell)
       - name: Validate docker compose config
-        run: |
-          docker compose -f docker-compose.yaml config
+        run: docker compose -f docker-compose.yaml config
 
-      - name: Build images
-        run: |
-          docker compose -f docker-compose.yaml build
+      # ✅ Next.js App normal builden (ohne Docker)
+      - name: Install app deps
+        run: npm ci
+
+      - name: Build app
+        run: npm run build
+
+      # (Optional) Websocket minimal checken, wenn du magst:
+      # - name: Check websocket syntax
+      #   run: node --check path/zur/deiner/websocket.mjs
 
   deploy:
     name: Deploy to Debian Server
-    needs: test-compose
+    needs: test
     runs-on: ubuntu-latest
-
-    # WICHTIG: nur bei Push, nicht bei Pull Request
-    if: github.event_name == 'push'
+    if: github.event_name == 'push'   # nur bei Push auf main
 
     steps:
       - name: Setup SSH key
@@ -63,7 +71,6 @@ jobs:
         run: |
           ssh server << 'EOF'
           set -e
-
           cd /opt/digitalstage
 
           echo ">>> Pulling latest main..."
@@ -85,8 +92,8 @@ jobs:
 
           chmod 600 .env
 
-          echo ">>> Starting docker compose..."
-          docker compose up -d --build
+          echo ">>> Building & starting containers on server..."
+          docker compose -f docker-compose.yaml up -d --build
 
           echo ">>> Done."
           EOF

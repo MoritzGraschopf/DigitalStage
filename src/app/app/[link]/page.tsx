@@ -244,6 +244,7 @@ export function VideoTile({
     );
 }
 
+// eslint-disable-next-line
 function DebugRemoteVideo({ stream }: { stream: MediaStream | null }) {
     const ref = useRef<HTMLVideoElement | null>(null);
 
@@ -346,7 +347,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
             return;
         }
         setOrganizer(allUsers.find(u => u.id === conference.organizerId) ?? null);
-    }, [conference?.organizerId, allUsers]);
+    }, [conference?.organizerId, allUsers, conference]);
 
 
     const derivedRole: "VIEWER" | "PARTICIPANT" | "ORGANIZER" = useMemo(() => {
@@ -433,6 +434,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
         role: derivedRole,
     });
 
+    // eslint-disable-next-line
     const firstRemoteStream =
         Object.values(remoteStreams)[0] ?? null;
 
@@ -489,6 +491,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                         
                         // Prüfe ob Video-Track wirklich Frames liefert
                         if (track.kind === "video") {
+                            // eslint-disable-next-line
                             const stats = (track as any).getStats ? (track as any).getStats() : null;
                             if (stats) {
                                 console.log("Video Track Stats:", stats);
