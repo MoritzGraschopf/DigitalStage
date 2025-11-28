@@ -15,6 +15,20 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Create .env for CI from secrets
+        run: |
+          cat > .env << 'ENVEOF'
+          DATABASE_URL=${{ secrets.DATABASE_URL }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          NEXT_PUBLIC_WS_URL=${{ secrets.NEXT_PUBLIC_WS_URL }}
+          NEXT_PUBLIC_STUN_URL=${{ secrets.NEXT_PUBLIC_STUN_URL }}
+          ANNOUNCED_IP=${{ secrets.ANNOUNCED_IP }}
+          MEDIASOUP_MIN_PORT=${{ secrets.MEDIASOUP_MIN_PORT }}
+          MEDIASOUP_MAX_PORT=${{ secrets.MEDIASOUP_MAX_PORT }}
+          MEDIASOUP_LISTEN_IP=${{ secrets.MEDIASOUP_LISTEN_IP }}
+          NODE_ENV=${{ secrets.NODE_ENV }}
+          ENVEOF
+
       - name: Check Docker & Compose
         run: |
           docker --version
@@ -27,7 +41,6 @@ jobs:
       - name: Build images
         run: |
           docker compose -f docker-compose.yaml build
-  
 
   deploy:
     name: Deploy to Debian Server
