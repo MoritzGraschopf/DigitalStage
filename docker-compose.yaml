@@ -3,7 +3,7 @@ services:
         image: digitalstage.liveroom.at/digitalstage-app:latest
         container_name: digitalStageApp
         ports:
-            - '3000:3000'
+            - '80:3000'
         depends_on:
             - db
         env_file:

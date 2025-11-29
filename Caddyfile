@@ -1,4 +1,4 @@
-registry.digitalstage.liveroom.at {
+digitalstage.liveroom.at {
     basicauth {
         admin $2a$14$gc9pg3PCKi0qWYmTpskN6u1RRhhQb.DQopit6.16i5Qhly4kEg2I6
     }
