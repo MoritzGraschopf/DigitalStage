@@ -49,6 +49,8 @@ jobs:
         run: npm ci
 
       - name: Build app
+        # falls du ESLint/Typecheck abschalten willst, kannst du hier z.B.:
+        # run: NEXT_TELEMETRY_DISABLED=1 npm run build -- --no-lint
         run: npm run build
 
   build-and-push:
@@ -121,11 +123,11 @@ jobs:
 
           chmod 600 .env
 
-          echo ">>> Pulling latest images..."
-          docker compose -f docker-compose.yaml pull
+          echo ">>> Pulling latest images for app, websocket, db..."
+          docker compose -f docker-compose.yaml pull app websocket db
 
-          echo ">>> Starting containers..."
-          docker compose -f docker-compose.yaml up -d
+          echo ">>> Starting containers (app, websocket, db)..."
+          docker compose -f docker-compose.yaml up -d app websocket db
 
           echo ">>> Done."
           EOF

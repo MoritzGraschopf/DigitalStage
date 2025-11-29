@@ -1,41 +1,68 @@
 services:
     app:
         image: digitalstage.liveroom.at/digitalstage-app:latest
-        container_name: digitalStageApp
-        ports:
-            - '80:3000'
-        depends_on:
-            - db
+        container_name: digitalstage_app
+        restart: unless-stopped
         env_file:
             - .env
         environment:
-          - DATABASE_URL=postgresql://digitalstage:digitalStage123@db:5432/digitalstage
-        restart: unless-stopped
+            # DB-URL für Prisma / Next.js
+            - DATABASE_URL=postgresql://digitalstage:digitalStage123@db:5432/digitalstage
+        expose:
+            - "3000"          # nur intern für Caddy sichtbar
+        depends_on:
+            - db
         command: sh -c "npx prisma migrate deploy && npm start"
 
     websocket:
         image: digitalstage.liveroom.at/digitalstage-websocket:latest
-        container_name: digitalStageSocket
-        depends_on:
-            - db
-        ports:
-            - '3010:3001'
+        container_name: digitalstage_websocket
+        restart: unless-stopped
         env_file:
             - .env
-        restart: unless-stopped
+        depends_on:
+            - db
+        # wenn dein Frontend aktuell noch direkt auf Port 3010 geht, lass das so:
+        ports:
+            - "3010:3001"
 
     db:
         image: postgres:16
-        restart: always
-        container_name: digitalStageDb
-        ports:
-            - '5432:5432'
+        container_name: digitalstage_db
+        restart: unless-stopped
         environment:
             POSTGRES_USER: digitalstage
             POSTGRES_PASSWORD: digitalStage123
             POSTGRES_DB: digitalstage
         volumes:
-            - pgdata:/var/lib/postgresql/data
+            - db-data:/var/lib/postgresql/data
+
+    registry:
+        image: registry:2
+        container_name: digitalstage_registry
+        restart: unless-stopped
+        expose:
+            - "5000"          # nur intern, Caddy geht drauf
+        volumes:
+            - registry-data:/var/lib/registry
+
+    caddy:
+        image: caddy:2
+        container_name: digitalstage_caddy
+        restart: unless-stopped
+        ports:
+            - "80:80"
+            - "443:443"
+        volumes:
+            - ./Caddyfile:/etc/caddy/Caddyfile
+            - caddy-data:/data
+            - caddy-config:/config
+        depends_on:
+            - app
+            - registry
 
 volumes:
-    pgdata:
+    db-data:
+    registry-data:
+    caddy-data:
+    caddy-config:
