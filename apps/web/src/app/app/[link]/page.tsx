@@ -556,7 +556,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                         <VideoTile
                                             stream={localStream}
                                             title={derivedRole === "ORGANIZER" ? "Du (Organizer)" : "Du"}
-                                            mutedByDefault={true}
+                                            mutedByDefault={false}
                                             className="w-full h-40 object-cover"
                                         />
                                         <div className="px-2 py-1 text-sm text-muted-foreground">{derivedRole === "ORGANIZER" ? "Du (Organizer)" : "Du"}</div>
@@ -568,7 +568,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                             key={peerId}
                                             stream={stream}
                                             title={peerId}
-                                            mutedByDefault={true}
+                                            mutedByDefault={false}
                                             className="w-full h-40 object-cover"
                                         />
                                     ))}

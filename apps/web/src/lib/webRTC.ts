@@ -517,7 +517,7 @@ export function useWebRTC(params: {
 
                 let stream: MediaStream | null;
                 try {
-                    stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+                    stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
                 } catch (e) {
                     console.error("getUserMedia failed:", e);
                     stream = null;
