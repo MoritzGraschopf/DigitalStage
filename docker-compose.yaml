@@ -22,9 +22,11 @@ services:
             - .env
         depends_on:
             - db
-        # wenn dein Frontend aktuell noch direkt auf Port 3010 geht, lass das so:
+        volumes:
+            - ./certs:/app/certs:ro
         ports:
             - "3010:3001"
+        command: ["node", "ws-server.mjs"]
 
     db:
         image: postgres:16

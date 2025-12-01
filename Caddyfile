@@ -1,21 +1,32 @@
 digitalstage.liveroom.at {
     # ==========================
-    # 1) Registry: /v2/*
+    # 1) WebSocket endpoint
     # ==========================
-    @registry path_regexp reg ^/v2/
-    # Basic Auth NUR für Registry
-    basicauth @registry {
-        admin $2a$14$gc9pg3PCKi0qWYmTpskN6u1RRhhQb.DQopit6.16i5Qhly4kEg2I6
+    @websocket {
+        path /ws
+    }
+    handle @websocket {
+        reverse_proxy websocket:3001
     }
 
+    # ==========================
+    # 2) Registry: /v2/*
+    # ==========================
+    @registry {
+        path /v2/*
+    }
+    basic_auth @registry {
+        admin $2a$14$gc9pg3PCKi0qWYmTpskN6u1RRhhQb.DQopit6.16i5Qhly4kEg2I6
+    }
     handle @registry {
         reverse_proxy registry:5000
     }
 
     # ==========================
-    # 2) Default → Next.js App
+    # 3) Default → Next.js App
     # ==========================
     handle {
         reverse_proxy app:3000
     }
 }
+
