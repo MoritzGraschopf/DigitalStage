@@ -463,6 +463,6 @@ wss.on("connection", (ws) => {
     });
 });
 
-server.listen(3001, "0.0.0.0", () => {
-    console.log("✅ WebSocket-Server läuft auf wss://0.0.0.0:3001");
+server.listen(3010, "0.0.0.0", () => {
+    console.log("✅ WebSocket-Server läuft auf wss://0.0.0.0:3010");
 });
