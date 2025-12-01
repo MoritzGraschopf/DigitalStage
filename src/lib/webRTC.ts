@@ -155,6 +155,9 @@ export function useWebRTC(params: {
         });
     }, []); // ✅ keine deps mehr
 
+    const iceServers = [
+        {urls: process.env.NEXT_PUBLIC_STUN_URL!},
+    ];
 
     // ----- consume helper
     const consumedRef = useRef<Map<string, string>>(new Map());
@@ -427,7 +430,8 @@ export function useWebRTC(params: {
 
             // Warte auf unmute, wenn der Track gemuted ist
             if (track.muted) {
-                console.log("⏳ Track is muted, waiting for unmute...", { kind: track.kind, producerId });
+                console.log("⏳ Track is muted, waiting for unmute...",
+                    { kind: track.kind, producerId });
                 let applied = false;
                 track.onunmute = () => {
                     console.log("🔊 Track unmuted!", { kind: track.kind, producerId, readyState: track.readyState });
@@ -709,7 +713,10 @@ export function useWebRTC(params: {
 
             console.log("✅ recv transport opts", recvOpts);
 
-            const recvTransport = device.createRecvTransport(recvOpts);
+            const recvTransport = device.createRecvTransport({
+                ...recvOpts,
+                iceServers,
+            });
 
             // 🔥 Transport State Logs
             recvTransport.on("connectionstatechange", (state) =>
@@ -777,7 +784,10 @@ export function useWebRTC(params: {
 
                 console.log("✅ send transport opts", sendOpts);
 
-                const sendTransport = device.createSendTransport(sendOpts);
+                const sendTransport = device.createSendTransport({
+                    ...sendOpts,
+                    iceServers
+                });
 
                 // 🔥 Transport State Logs
                 sendTransport.on("connectionstatechange", (state) =>

@@ -1,15 +1,11 @@
 import { WebSocketServer } from "ws";
-import https from "https";
-import fs from "fs";
+import http from "http";
 
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 const mediasoup = require("mediasoup");
 
-const server = https.createServer({
-    key: fs.readFileSync("./certs/dev-key.pem"),
-    cert: fs.readFileSync("./certs/dev-cert.pem"),
-});
+const server = http.createServer();
 const wss = new WebSocketServer({ server });
 
 const inConference = new Map();
