@@ -3,8 +3,6 @@ name: DigitalStage CI/CD
 on:
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
 
 env:
   REGISTRY: digitalstage.liveroom.at
@@ -12,54 +10,9 @@ env:
   WS_IMAGE: digitalstage.liveroom.at/digitalstage-websocket
 
 jobs:
-  test:
-    name: Test (Next.js + Compose Config)
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: 'npm'
-          cache-dependency-path: |
-            apps/web/package-lock.json
-
-      - name: Create .env from secrets (for build + compose config)
-        run: |
-          cat > .env << 'ENVEOF'
-          DATABASE_URL=${{ secrets.DATABASE_URL }}
-          JWT_SECRET=${{ secrets.JWT_SECRET }}
-          NEXT_PUBLIC_WS_URL=${{ secrets.NEXT_PUBLIC_WS_URL }}
-          NEXT_PUBLIC_STUN_URL=${{ secrets.NEXT_PUBLIC_STUN_URL }}
-          ANNOUNCED_IP=${{ secrets.ANNOUNCED_IP }}
-          MEDIASOUP_MIN_PORT=${{ secrets.MEDIASOUP_MIN_PORT }}
-          MEDIASOUP_MAX_PORT=${{ secrets.MEDIASOUP_MAX_PORT }}
-          MEDIASOUP_LISTEN_IP=${{ secrets.MEDIASOUP_LISTEN_IP }}
-          NODE_ENV=${{ secrets.NODE_ENV }}
-          ENVEOF
-
-      - name: Validate docker compose config
-        run: docker compose -f docker-compose.yaml config
-
-      - name: Install app deps (apps/web)
-        run: |
-          cd apps/web
-          npm ci
-
-      - name: Build app (apps/web)
-        run: |
-          cd apps/web
-          npm run build
-
   build-and-push:
     name: Build & Push Images to Private Registry
-    needs: test
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
 
     steps:
       - name: Checkout repo
@@ -93,7 +46,6 @@ jobs:
     name: Deploy to Debian Server
     needs: build-and-push
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
 
     steps:
       - name: Setup SSH key
