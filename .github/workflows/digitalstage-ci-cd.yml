@@ -15,6 +15,7 @@ jobs:
   test:
     name: Test (Next.js + Compose Config)
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
 
     steps:
       - name: Checkout repo
@@ -59,6 +60,7 @@ jobs:
     name: Build & Push Images to Private Registry
     needs: test
     runs-on: ubuntu-latest
+    if: github.event_name == 'push'
 
     steps:
       - name: Checkout repo
@@ -92,6 +94,7 @@ jobs:
     name: Deploy to Debian Server
     needs: build-and-push
     runs-on: ubuntu-latest
+    if: github.event_name == 'push'
 
     steps:
       - name: Setup SSH key
