@@ -136,8 +136,19 @@ async function createWebRtcTransport(router) {
     worker = await mediasoup.createWorker({
         rtcMinPort: Number(process.env.MEDIASOUP_MIN_PORT || 40000),
         rtcMaxPort: Number(process.env.MEDIASOUP_MAX_PORT || 49999),
-        logLevel: "warn",
-        logTags: ["ice", "dtls", "rtp", "srtp", "rtcp"],
+        logLevel: "debug",
+        logTags: [
+            "info",
+            "ice",
+            "dtls",
+            "rtp",
+            "srtp",
+            "rtcp",
+            "bwe",
+            "score",
+            "simulcast",
+            "svc"
+        ],
     });
 
     worker.on("died", () => {
