@@ -1,13 +1,17 @@
-FROM node:24-alpine AS runner
+FROM node:24-slim AS runner
 
 WORKDIR /app
 
-RUN apk add --no-cache python3 py3-pip make g++ \
-    && if [ ! -e /usr/bin/python ]; then ln -s /usr/bin/python3 /usr/bin/python; fi
+# Optional, aber schadet nicht – falls mediasoup doch python braucht:
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
+# Nur WebSocket-Dependencies
 COPY package*.json ./
 RUN npm ci --omit=dev
 
+# Rest des WebSocket-Projekts
 COPY . .
 
 ENV NODE_ENV=production
