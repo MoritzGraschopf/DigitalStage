@@ -26,6 +26,7 @@ services:
             - ./certs:/app/certs:ro
         ports:
             - "3010"
+            - "40000-40100:40000-40100"
         command: ["node", "ws-server.mjs"]
 
     db:
