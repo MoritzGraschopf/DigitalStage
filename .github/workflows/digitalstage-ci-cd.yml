@@ -82,6 +82,10 @@ jobs:
 
           echo ">>> Starting containers (app, websocket, db)..."
           docker compose -f docker-compose.yaml up -d app websocket db
+          
+          echo ">>> Cleaning old Docker images..."
+          docker image prune -a -f
+          docker builder prune -a -f
 
           echo ">>> Done."
           EOF
