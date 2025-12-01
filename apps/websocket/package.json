@@ -1,0 +1,14 @@
+{
+  "name": "digitalstage-websocket",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "ws-server.mjs",
+  "scripts": {
+    "start": "node ws-server.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.3",
+    "mediasoup": "^3.19.11"
+  }
+}

@@ -47,3 +47,6 @@ next-env.d.ts
 .cursor
 
 # hell yeah
+/apps/websocket/node_modules/
+/apps/web/.next/
+/apps/web/node_modules/

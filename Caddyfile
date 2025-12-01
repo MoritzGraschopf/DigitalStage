@@ -6,7 +6,7 @@ digitalstage.liveroom.at {
         path /ws
     }
     handle @websocket {
-        reverse_proxy websocket:3001
+        reverse_proxy websocket:3010
     }
 
     # ==========================

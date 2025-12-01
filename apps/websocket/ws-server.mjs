@@ -5,8 +5,8 @@ import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 const mediasoup = require("mediasoup");
 
-const server = http.createServer();
-const wss = new WebSocketServer({ server });
+const wsServer = http.createServer();
+const wss = new WebSocketServer({ server: wsServer });
 
 const inConference = new Map();
 const notInConference = new Map();
@@ -463,6 +463,6 @@ wss.on("connection", (ws) => {
     });
 });
 
-server.listen(3001, "0.0.0.0", () => {
-    console.log("✅ WebSocket-Server läuft auf wss://0.0.0.0:3001");
+wsServer.listen(3010, "0.0.0.0", () => {
+    console.log("✅ WebSocket-Server läuft auf wss://0.0.0.0:3010");
 });

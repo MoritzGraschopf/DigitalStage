@@ -15,6 +15,7 @@ jobs:
   test:
     name: Test (Next.js + Compose Config)
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
 
     steps:
       - name: Checkout repo
@@ -26,7 +27,7 @@ jobs:
           node-version: 24
           cache: 'npm'
           cache-dependency-path: |
-            package-lock.json
+            apps/web/package-lock.json
 
       - name: Create .env from secrets (for build + compose config)
         run: |
@@ -45,13 +46,15 @@ jobs:
       - name: Validate docker compose config
         run: docker compose -f docker-compose.yaml config
 
-      - name: Install app deps
-        run: npm ci
+      - name: Install app deps (apps/web)
+        run: |
+          cd apps/web
+          npm ci
 
-      - name: Build app
-        # falls du ESLint/Typecheck abschalten willst, kannst du hier z.B.:
-        # run: NEXT_TELEMETRY_DISABLED=1 npm run build -- --no-lint
-        run: npm run build
+      - name: Build app (apps/web)
+        run: |
+          cd apps/web
+          npm run build
 
   build-and-push:
     name: Build & Push Images to Private Registry
@@ -71,16 +74,16 @@ jobs:
       - name: Build app image
         run: |
           docker build \
-            -f Dockerfile \
+            -f docker/Dockerfile \
             -t $APP_IMAGE:latest \
             .
 
       - name: Build websocket image
         run: |
           docker build \
-            -f Dockerfile.ws \
+            -f docker/Dockerfile.ws \
             -t $WS_IMAGE:latest \
-            .
+            apps/websocket
 
       - name: Push images
         run: |
