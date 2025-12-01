@@ -515,7 +515,7 @@ export function useWebRTC(params: {
 
                 sendTransportRef.current = sendTransport;
 
-                let stream: MediaStream | null = null;
+                let stream: MediaStream | null;
                 try {
                     stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
                 } catch (e) {
@@ -542,7 +542,6 @@ export function useWebRTC(params: {
                 }
             }
 
-            // 4) existierende Producer consummen
             for (const p of joinRes.existingProducers) {
                 try {
                     await consume(p.userId, p.producerId);
