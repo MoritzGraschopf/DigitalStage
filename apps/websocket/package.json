@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "main": "server.mjs",
+  "main": "ws-server.mjs",
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node ws-server.mjs"
   },
   "dependencies": {
     "ws": "^8.18.3",
