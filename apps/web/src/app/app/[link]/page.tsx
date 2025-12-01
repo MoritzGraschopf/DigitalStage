@@ -584,7 +584,6 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                     {derivedRole === "ORGANIZER" && (
                         <>
                             <Button disabled={conference.status === "ENDED"} onClick={() => setCommandOpen(true)}>Teilnehmer hinzufügen</Button>
-
                             <CommandDialog open={commandOpen} onOpenChange={(o) => { setCommandOpen(o); if (!o) setSelectedUserIds([]); }}>
                                 <div className="m-4 space-y-2">
                                     <h1 className="text-lg font-semibold">Teilnehmer auswählen</h1>
