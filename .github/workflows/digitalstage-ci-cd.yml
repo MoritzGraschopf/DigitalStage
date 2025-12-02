@@ -8,6 +8,7 @@ env:
   REGISTRY: digitalstage.liveroom.at
   APP_IMAGE: digitalstage.liveroom.at/digitalstage-app
   WS_IMAGE: digitalstage.liveroom.at/digitalstage-websocket
+  FFPMEG_IMAGE: digitalstage.liveroom.at/digitalstage-ffmpeg
 
 jobs:
   build-and-push:
@@ -37,10 +38,18 @@ jobs:
             -t $WS_IMAGE:latest \
             apps/websocket
 
+      - name: Build ffmpeg image
+        run: |
+          docker build \
+            -f docker/Dockerfile.ffmpeg \
+            -t $FFPMEG_IMAGE:latest \
+            .
+
       - name: Push images
         run: |
           docker push $APP_IMAGE:latest
           docker push $WS_IMAGE:latest
+          docker push $FFPMEG_IMAGE:latest
 
   deploy:
     name: Deploy to Debian Server
@@ -78,10 +87,10 @@ jobs:
           chmod 600 .env
 
           echo ">>> Pulling latest images for app, websocket, db..."
-          docker compose -f docker-compose.yaml pull app websocket db
+          docker compose -f docker-compose.yaml pull app websocket db ffmpeg
 
           echo ">>> Starting containers (app, websocket, db)..."
-          docker compose -f docker-compose.yaml up -d app websocket db
+          docker compose -f docker-compose.yaml up -d app websocket db ffmpeg
           
           echo ">>> Cleaning old Docker images..."
           docker image prune -a -f
