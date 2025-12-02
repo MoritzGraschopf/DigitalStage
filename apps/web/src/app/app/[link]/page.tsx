@@ -182,7 +182,6 @@ function VideoTile({
         // falls metadata schon da ist
         if (el.readyState >= 1) onMeta();
 
-        // Prüfe nach kurzer Zeit, ob das Video wirklich spielt
         const checkTimeout = setTimeout(() => {
             if (el.paused && el.readyState > 0 && stream.getTracks().length > 0) {
                 console.warn("Video still paused after setup", title);
@@ -192,7 +191,6 @@ function VideoTile({
 
         return () => {
             clearTimeout(checkTimeout);
-            // Handler entfernen
             stream.onaddtrack = null;
             el.removeEventListener("loadedmetadata", onMeta);
             el.removeEventListener("playing", onPlaying);
@@ -246,7 +244,6 @@ function VideoTile({
     );
 }
 
-// eslint-disable-next-line
 function DebugRemoteVideo({ stream }: { stream: MediaStream | null }) {
     const ref = useRef<HTMLVideoElement | null>(null);
 
