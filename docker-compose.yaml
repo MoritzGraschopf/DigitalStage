@@ -64,8 +64,28 @@ services:
             - app
             - registry
 
+    # Ausschnitt für den FFmpeg-Konverter-Service
+    ffmpeg:
+        image: digitalstage.liveroom.at/digitalstage-ffmpeg:latest
+        container_name: digitalstage_ffmpeg
+        restart: unless-stopped
+        depends_on:
+            -   websocket
+        command: >
+            ffmpeg -protocol_whitelist file,udp,rtp -timeout 0 -i rtp://0.0.0.0:5004?listen=1 
+            -c:v libx264 -preset veryfast -crf 23 -c:a aac -b:a 128k 
+            -f hls -hls_time 4 -hls_list_size 5 -hls_flags delete_segments 
+            /mnt/hls_output/stream.m3u8
+        # Offenlegung des UDP-Ports (wichtig für die Kommunikation mit Mediasoup,
+        # falls sie nicht im gleichen internen Netzwerk sind, aber hier meist unnötig)
+        # ports:
+        #  - "5004:5004/udp"
+        volumes:
+            - hls_data:/mnt/hls_output # Wird in Issue 3 definiert
+
 volumes:
     db-data:
     registry-data:
     caddy-data:
     caddy-config:
+    hls_data:
