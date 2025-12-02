@@ -179,7 +179,6 @@ function VideoTile({
         el.addEventListener("playing", onPlaying);
         el.addEventListener("pause", onPause);
 
-        // falls metadata schon da ist
         if (el.readyState >= 1) onMeta();
 
         const checkTimeout = setTimeout(() => {
@@ -191,6 +190,7 @@ function VideoTile({
 
         return () => {
             clearTimeout(checkTimeout);
+            // Handler entfernen
             stream.onaddtrack = null;
             el.removeEventListener("loadedmetadata", onMeta);
             el.removeEventListener("playing", onPlaying);
@@ -244,6 +244,7 @@ function VideoTile({
     );
 }
 
+// eslint-disable-next-line
 function DebugRemoteVideo({ stream }: { stream: MediaStream | null }) {
     const ref = useRef<HTMLVideoElement | null>(null);
 
