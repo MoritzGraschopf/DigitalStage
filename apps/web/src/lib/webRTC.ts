@@ -171,6 +171,10 @@ export function useWebRTC(params: {
 
     const consume = useCallback(
         async (fromUserId: string, producerId: string) => {
+            if(fromUserId === userIdRef.current){
+                return;
+            }
+
             const device = deviceRef.current;
             const recvTransport = recvTransportRef.current;
             if (!device || !recvTransport) {
@@ -522,7 +526,7 @@ export function useWebRTC(params: {
                     console.error("getUserMedia failed:", e);
                     stream = null;
                 }
-                if (!mounted) return;
+
                 setLocalStream(stream);
 
                 if (stream) {
