@@ -8,7 +8,7 @@ env:
   REGISTRY: digitalstage.liveroom.at
   APP_IMAGE: digitalstage.liveroom.at/digitalstage-app
   WS_IMAGE: digitalstage.liveroom.at/digitalstage-websocket
-  FFPMEG_IMAGE: digitalstage.liveroom.at/digitalstage-ffmpeg
+  FFMPEG_IMAGE: digitalstage.liveroom.at/digitalstage-ffmpeg
 
 jobs:
   build-and-push:
@@ -41,15 +41,15 @@ jobs:
       - name: Build ffmpeg image
         run: |
           docker build \
-            -f docker/Dockerfile.ffmpeg \
-            -t $FFPMEG_IMAGE:latest \
+            -f docker/ffmpeg.Dockerfile \
+            -t $FFMPEG_IMAGE:latest \
             .
 
       - name: Push images
         run: |
           docker push $APP_IMAGE:latest
           docker push $WS_IMAGE:latest
-          docker push $FFPMEG_IMAGE:latest
+          docker push $FFMPEG_IMAGE:latest
 
   deploy:
     name: Deploy to Debian Server
