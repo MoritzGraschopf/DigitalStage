@@ -27,6 +27,7 @@ type VideoTileProps = {
     title: string;
     mutedByDefault?: boolean;
     className?: string;
+    mirror?: boolean;
 };
 
 function VideoTile({
@@ -34,6 +35,7 @@ function VideoTile({
                               title,
                               mutedByDefault = false,
                               className = "",
+                              mirror = false,
                           }: VideoTileProps) {
     const ref = useRef<HTMLVideoElement | null>(null);
     const [muted, setMuted] = useState<boolean>(mutedByDefault);
@@ -208,7 +210,7 @@ function VideoTile({
                 autoPlay
                 playsInline
                 muted={muted}
-                className={`${className} bg-black`}
+                className={`${className} bg-black ${mirror ? "scale-x-[-1]" : ""}`}
             />
             {!hasVideo && (
                 <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground bg-background/80">
@@ -557,6 +559,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                             stream={localStream}
                                             title={derivedRole === "ORGANIZER" ? "Du (Organizer)" : "Du"}
                                             mutedByDefault={false}
+                                            mirror={false}
                                             className="w-full h-40 object-cover"
                                         />
                                         <div className="px-2 py-1 text-sm text-muted-foreground">{derivedRole === "ORGANIZER" ? "Du (Organizer)" : "Du"}</div>
@@ -568,6 +571,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                             key={peerId}
                                             stream={stream}
                                             title={peerId}
+                                            mirror={false}
                                             mutedByDefault={false}
                                             className="w-full h-40 object-cover"
                                         />
