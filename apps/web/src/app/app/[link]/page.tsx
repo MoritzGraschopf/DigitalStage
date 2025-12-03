@@ -556,8 +556,8 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                         <VideoTile
                                             stream={localStream}
                                             title={derivedRole === "ORGANIZER" ? "Du (Organizer)" : "Du"}
-                                            mutedByDefault={false}
-                                            mirror={false}
+                                            mutedByDefault={true}
+                                            mirror={true}
                                             className="w-full h-40 object-cover"
                                         />
                                         <div className="px-2 py-1 text-sm text-muted-foreground">{derivedRole === "ORGANIZER" ? "Du (Organizer)" : "Du"}</div>
