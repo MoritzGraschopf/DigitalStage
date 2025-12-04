@@ -13,7 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Check, Copy, Info, LoaderCircle } from "lucide-react";
+import { ArrowLeft, Check, Copy, Info, LoaderCircle, MessageCircle } from "lucide-react";
 import ConferenceChat from "@/components/ConferenceChat";
 
 type ConferenceWithParticipants = Conference & { participants: UserConference[] };
@@ -483,11 +483,91 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
     }
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-[3fr_1fr] grid-rows-[min-content_1fr] h-screen w-screen fixed top-0 left-0 z-[-1] overflow-hidden">
+        <div className="flex flex-col lg:grid lg:grid-cols-[3fr_1fr] lg:grid-rows-[min-content_1fr] h-screen w-screen fixed top-0 left-0 z-[-1] overflow-hidden">
             <div className="h-13"></div>
             <div></div>
 
-            <div className="m-2 lg:ml-2 border rounded-xl relative h-full bg-gradient-to-br from-background via-background to-muted/5 overflow-hidden shadow-inner">
+            {/* Toolbar für mobile Geräte */}
+            <div className="lg:hidden flex items-center justify-between gap-2 p-2 border-b bg-background/95 backdrop-blur-sm z-40">
+                <div className="flex items-center gap-2">
+                    <Button asChild variant="ghost" size="sm">
+                        <Link href="/app" className="flex items-center gap-1.5">
+                            <ArrowLeft className="w-4 h-4" />
+                            <span>Zurück</span>
+                        </Link>
+                    </Button>
+                    {derivedRole === "ORGANIZER" && (
+                        <Button 
+                            disabled={conference.status === "ENDED"} 
+                            onClick={() => setCommandOpen(true)}
+                            size="sm"
+                            variant="outline"
+                        >
+                            Teilnehmer hinzufügen
+                        </Button>
+                    )}
+                </div>
+                <Sheet>
+                    <SheetTrigger asChild>
+                        <Button size="icon" variant="ghost">
+                            <Info className="w-4 h-4" />
+                        </Button>
+                    </SheetTrigger>
+                    <SheetContent>
+                        <SheetHeader>
+                            <SheetTitle>Konferenzinfo</SheetTitle>
+                            <SheetDescription>Live-Stream mit Chat für alle Zuschauer dieser Konferenz.</SheetDescription>
+                        </SheetHeader>
+                        <div className="grid grid-cols-[min-content_1fr] items-center gap-2 px-4 mt-4">
+                            <div className="font-medium">Titel:</div>
+                            <div className="text-right">{conference.title}</div>
+                            <Separator className="col-span-2" />
+                            <div className="font-medium">Beschreibung:</div>
+                            <div className="text-right">{conference.description}</div>
+                            <Separator className="col-span-2" />
+                            <div className="font-medium">Von:</div>
+                            <div className="text-right">{!!conference.startAt ? new Date(conference.startAt).toLocaleDateString("de-DE") : "Datum nicht verfügbar"}</div>
+                            <div className="font-medium">Bis:</div>
+                            <div className="text-right">{!!conference.endDate ? new Date(conference.endDate).toLocaleDateString("de-DE") : "Datum nicht verfügbar"}</div>
+                            <Separator className="col-span-2" />
+                            <div className="font-medium">Status:</div>
+                            <div className="text-right">{mapStatus(conference.status)}</div>
+                            <Separator className="col-span-2" />
+                            <div className="font-medium">Organisator:</div>
+                            <div className="text-right">
+                                <div className="flex flex-wrap justify-end gap-1">
+                                    <Badge variant="outline">{organizer?.firstName} {organizer?.lastName ?? ""}</Badge>
+                                </div>
+                            </div>
+                            <Separator className="col-span-2" />
+                            <div className="font-medium">Teilnehmer:</div>
+                            <div className="text-right">
+                                <div className="flex flex-wrap justify-end gap-1">
+                                    {currentParticipants.map((u) => <Badge key={u.id} variant="outline">{u.firstName} {u.lastName ?? ""}</Badge>)}
+                                </div>
+                            </div>
+                            <Separator className="col-span-2" />
+                            <div className="font-medium">Link:</div>
+                            <div className="text-right">
+                                <Tooltip>
+                                    <TooltipTrigger asChild><Button onClick={async () => {
+                                        try {
+                                            await navigator.clipboard.writeText(`${window.location.origin}/app/${link}`);
+                                            setCopied(true);
+                                            setTimeout(() => setCopied(false), 2000);
+                                        } catch (err) { console.error("Kopieren fehlgeschlagen:", err); }
+                                    }} size="icon" variant="outline">
+                                        {copied ? <Check /> : <Copy />}
+                                    </Button></TooltipTrigger>
+                                    <TooltipContent side="left"><p>{copied ? "Kopiert!" : "Link kopieren"}</p></TooltipContent>
+                                </Tooltip>
+                            </div>
+                        </div>
+                    </SheetContent>
+                </Sheet>
+            </div>
+
+            <div className="m-2 lg:ml-2 border rounded-xl relative h-full lg:h-auto bg-gradient-to-br from-background via-background to-muted/5 overflow-hidden shadow-inner flex-1 min-h-0">
                 {disabled ? (
                     <div className="h-full justify-center items-center flex flex-col gap-4 p-8">
                         <div className="text-5xl mb-2">🔴</div>
@@ -642,12 +722,12 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                     </>
                 )}
 
-                <div className="absolute bottom-2 left-2 sm:bottom-4 sm:left-4 flex gap-2 sm:gap-3 flex-wrap z-30">
-                    <Button asChild variant="outline" size="sm" className="shadow-lg backdrop-blur-sm bg-background/95 hover:bg-background border-2 text-xs sm:text-sm">
-                        <Link href="/app" className="flex items-center gap-1.5 sm:gap-2">
-                            <ArrowLeft className="w-3 h-3 sm:w-4 sm:h-4" />
-                            <span className="hidden sm:inline">Verlassen</span>
-                            <span className="sm:hidden">Zurück</span>
+                {/* Desktop Buttons - nur auf größeren Bildschirmen sichtbar */}
+                <div className="hidden lg:flex absolute bottom-4 left-4 gap-3 flex-wrap z-30">
+                    <Button asChild variant="outline" className="shadow-lg backdrop-blur-sm bg-background/95 hover:bg-background border-2">
+                        <Link href="/app" className="flex items-center gap-2">
+                            <ArrowLeft className="w-4 h-4" />
+                            Verlassen
                         </Link>
                     </Button>
 
@@ -656,11 +736,9 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                             <Button 
                                 disabled={conference.status === "ENDED"} 
                                 onClick={() => setCommandOpen(true)}
-                                size="sm"
-                                className="shadow-lg backdrop-blur-sm text-xs sm:text-sm"
+                                className="shadow-lg backdrop-blur-sm"
                             >
-                                <span className="hidden sm:inline">Teilnehmer hinzufügen</span>
-                                <span className="sm:hidden">Hinzufügen</span>
+                                Teilnehmer hinzufügen
                             </Button>
                             <CommandDialog open={commandOpen} onOpenChange={(o) => { setCommandOpen(o); if (!o) setSelectedUserIds([]); }}>
                                 <div className="m-4 space-y-2">
@@ -737,7 +815,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                             <Button 
                                 size="icon" 
                                 variant="outline" 
-                                className="shadow-lg backdrop-blur-sm bg-background/95 hover:bg-background border-2"
+                                className="shadow-lg backdrop-blur-sm bg-background/95 hover:bg-background border-2 hidden lg:flex"
                             >
                                 <Info className="w-4 h-4" />
                             </Button>
@@ -797,9 +875,30 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                 </div>
             </div>
 
-            <div className="m-2 lg:mx-2 border rounded-xl h-full flex-grow overflow-hidden bg-gradient-to-br from-background via-background to-muted/5 shadow-inner">
+            {/* Chat - auf mobil als Sheet, auf Desktop als Sidebar */}
+            <div className="hidden lg:block m-2 lg:mx-2 border rounded-xl h-full flex-grow overflow-hidden bg-gradient-to-br from-background via-background to-muted/5 shadow-inner">
                 <ConferenceChat conference={conference} disabled={disabled} />
             </div>
+            
+            {/* Mobile Chat Sheet */}
+            <Sheet>
+                <SheetTrigger asChild>
+                    <Button 
+                        className="lg:hidden fixed bottom-4 right-4 rounded-full w-14 h-14 shadow-2xl z-50 bg-primary hover:bg-primary/90"
+                        size="icon"
+                    >
+                        <MessageCircle className="w-6 h-6 text-primary-foreground" />
+                    </Button>
+                </SheetTrigger>
+                <SheetContent side="bottom" className="h-[70vh] p-0">
+                    <SheetHeader className="px-4 pt-4 pb-2 border-b">
+                        <SheetTitle>Chat</SheetTitle>
+                    </SheetHeader>
+                    <div className="h-[calc(70vh-4rem)] overflow-hidden">
+                        <ConferenceChat conference={conference} disabled={disabled} />
+                    </div>
+                </SheetContent>
+            </Sheet>
         </div>
     );
 }
