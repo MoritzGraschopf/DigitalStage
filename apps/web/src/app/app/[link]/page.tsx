@@ -245,22 +245,22 @@ function VideoTile({
                 )}
 
                 {/* Name and Controls Overlay */}
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent px-4 py-3">
-                    <div className="flex items-center justify-between">
-                        <span className="text-sm font-semibold text-white truncate flex-1">{title}</span>
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3">
+                    <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs sm:text-sm font-semibold text-white truncate flex-1 min-w-0">{title}</span>
                         {hasAudio && (
                             <button
-                                className="ml-3 p-2 rounded-lg bg-black/40 hover:bg-black/60 text-white transition-all flex-shrink-0 backdrop-blur-sm hover:scale-110 active:scale-95"
+                                className="ml-2 sm:ml-3 p-1.5 sm:p-2 rounded-lg bg-black/40 hover:bg-black/60 text-white transition-all flex-shrink-0 backdrop-blur-sm hover:scale-110 active:scale-95"
                                 onClick={() => setMuted(m => !m)}
                                 title={muted ? "Ton an" : "Ton aus"}
                             >
                                 {muted ? (
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                    <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
                                     </svg>
                                 ) : (
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                    <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 14.142M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
                                     </svg>
                                 )}
@@ -464,6 +464,15 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
         role: derivedRole,
     });
 
+    // Map peerId (userId) zu User-Namen
+    const getUserName = useCallback((peerId: string): string => {
+        const foundUser = allUsers.find(u => u.id === peerId);
+        if (foundUser) {
+            return `${foundUser.firstName}${foundUser.lastName ? ` ${foundUser.lastName}` : ""}`;
+        }
+        return peerId; // Fallback zu ID falls User nicht gefunden
+    }, [allUsers]);
+
     if (!conference) {
         return (
             <div className="h-screen w-screen fixed top-0 left-0 z-[-1] flex justify-center items-center flex-col gap-2">
@@ -474,11 +483,11 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
     }
 
     return (
-        <div className="grid grid-cols-[3fr_1fr] grid-rows-[min-content_1fr] h-screen w-screen fixed top-0 left-0 z-[-1] overflow-hidden">
+        <div className="grid grid-cols-1 lg:grid-cols-[3fr_1fr] grid-rows-[min-content_1fr] h-screen w-screen fixed top-0 left-0 z-[-1] overflow-hidden">
             <div className="h-13"></div>
             <div></div>
 
-            <div className="ml-2 border rounded-xl relative h-full bg-gradient-to-br from-background via-background to-muted/5 overflow-hidden shadow-inner">
+            <div className="m-2 lg:ml-2 border rounded-xl relative h-full bg-gradient-to-br from-background via-background to-muted/5 overflow-hidden shadow-inner">
                 {disabled ? (
                     <div className="h-full justify-center items-center flex flex-col gap-4 p-8">
                         <div className="text-5xl mb-2">🔴</div>
@@ -496,7 +505,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                 </div>
                             </div>
                         ) : (
-                            <div className="h-full relative p-4 overflow-auto">
+                            <div className="h-full relative p-2 sm:p-3 md:p-4 overflow-auto">
                                 {(() => {
                                     const remoteEntries = Object.entries(remoteStreams);
                                     const remoteCount = remoteEntries.length;
@@ -518,7 +527,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                     // Nur lokales Video
                                     if (hasLocal && remoteCount === 0) {
                                         return (
-                                            <div className="h-full flex items-center justify-center p-8">
+                                            <div className="h-full flex items-center justify-center p-4 sm:p-6 md:p-8">
                                                 <div className="w-full max-w-4xl">
                                                     <VideoTile
                                                         stream={localStream}
@@ -533,12 +542,12 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                         );
                                     }
 
-                                    // 1-2 Teilnehmer: Side-by-side oder gestapelt
+                                    // 1-2 Teilnehmer: Side-by-side oder gestapelt (responsive)
                                     if (totalCount <= 2) {
                                         return (
-                                            <div className="h-full flex gap-4">
+                                            <div className="h-full flex flex-col sm:flex-row gap-3 sm:gap-4">
                                                 {hasLocal && (
-                                                    <div className="flex-1 min-w-0">
+                                                    <div className="flex-1 min-w-0 min-h-0">
                                                         <VideoTile
                                                             stream={localStream}
                                                             title={derivedRole === "ORGANIZER" ? "Du (Organizer)" : "Du"}
@@ -550,10 +559,10 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                                     </div>
                                                 )}
                                                 {remoteEntries.map(([peerId, stream]) => (
-                                                    <div key={peerId} className="flex-1 min-w-0">
+                                                    <div key={peerId} className="flex-1 min-w-0 min-h-0">
                                                         <VideoTile
                                                             stream={stream}
-                                                            title={peerId}
+                                                            title={getUserName(peerId)}
                                                             mirror={false}
                                                             mutedByDefault={false}
                                                             isLocal={false}
@@ -565,10 +574,10 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                         );
                                     }
 
-                                    // 3-4 Teilnehmer: 2x2 Grid
+                                    // 3-4 Teilnehmer: 2x2 Grid (responsive: 1 Spalte auf mobil, 2 auf größeren Bildschirmen)
                                     if (totalCount <= 4) {
                                         return (
-                                            <div className="h-full grid grid-cols-2 gap-4">
+                                            <div className="h-full grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                                 {hasLocal && (
                                                     <VideoTile
                                                         stream={localStream}
@@ -583,7 +592,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                                     <VideoTile
                                                         key={peerId}
                                                         stream={stream}
-                                                        title={peerId}
+                                                        title={getUserName(peerId)}
                                                         mirror={false}
                                                         mutedByDefault={false}
                                                         isLocal={false}
@@ -594,16 +603,16 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                         );
                                     }
 
-                                    // 5+ Teilnehmer: Grid mit lokalem Video als Overlay
+                                    // 5+ Teilnehmer: Grid mit lokalem Video als Overlay (vollständig responsive)
                                     return (
                                         <div className="h-full relative">
-                                            {/* Remote Videos Grid */}
-                                            <div className="h-full grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pr-4">
+                                            {/* Remote Videos Grid - responsive: 1 Spalte mobil, 2 tablet, 3 desktop, 4 large */}
+                                            <div className="h-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 pr-2 sm:pr-4">
                                                 {remoteEntries.map(([peerId, stream]) => (
                                                     <VideoTile
                                                         key={peerId}
                                                         stream={stream}
-                                                        title={peerId}
+                                                        title={getUserName(peerId)}
                                                         mirror={false}
                                                         mutedByDefault={false}
                                                         isLocal={false}
@@ -612,9 +621,9 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                                 ))}
                                             </div>
                                             
-                                            {/* Lokales Video als Overlay in rechter unterer Ecke */}
+                                            {/* Lokales Video als Overlay - responsive Größe */}
                                             {hasLocal && (
-                                                <div className="absolute bottom-6 right-6 w-72 md:w-80 lg:w-96 z-20 shadow-2xl rounded-xl overflow-hidden">
+                                                <div className="absolute bottom-3 right-3 sm:bottom-4 sm:right-4 md:bottom-6 md:right-6 w-[calc(100%-1.5rem)] sm:w-64 md:w-72 lg:w-80 xl:w-96 max-w-full z-20 shadow-2xl rounded-xl overflow-hidden">
                                                     <VideoTile
                                                         stream={localStream}
                                                         title={derivedRole === "ORGANIZER" ? "Du (Organizer)" : "Du"}
@@ -633,11 +642,12 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                     </>
                 )}
 
-                <div className="absolute bottom-4 left-4 flex gap-3 flex-wrap z-30">
-                    <Button asChild variant="outline" className="shadow-lg backdrop-blur-sm bg-background/95 hover:bg-background border-2">
-                        <Link href="/app" className="flex items-center gap-2">
-                            <ArrowLeft className="w-4 h-4" />
-                            Verlassen
+                <div className="absolute bottom-2 left-2 sm:bottom-4 sm:left-4 flex gap-2 sm:gap-3 flex-wrap z-30">
+                    <Button asChild variant="outline" size="sm" className="shadow-lg backdrop-blur-sm bg-background/95 hover:bg-background border-2 text-xs sm:text-sm">
+                        <Link href="/app" className="flex items-center gap-1.5 sm:gap-2">
+                            <ArrowLeft className="w-3 h-3 sm:w-4 sm:h-4" />
+                            <span className="hidden sm:inline">Verlassen</span>
+                            <span className="sm:hidden">Zurück</span>
                         </Link>
                     </Button>
 
@@ -646,9 +656,11 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                             <Button 
                                 disabled={conference.status === "ENDED"} 
                                 onClick={() => setCommandOpen(true)}
-                                className="shadow-lg backdrop-blur-sm"
+                                size="sm"
+                                className="shadow-lg backdrop-blur-sm text-xs sm:text-sm"
                             >
-                                Teilnehmer hinzufügen
+                                <span className="hidden sm:inline">Teilnehmer hinzufügen</span>
+                                <span className="sm:hidden">Hinzufügen</span>
                             </Button>
                             <CommandDialog open={commandOpen} onOpenChange={(o) => { setCommandOpen(o); if (!o) setSelectedUserIds([]); }}>
                                 <div className="m-4 space-y-2">
@@ -785,7 +797,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                 </div>
             </div>
 
-            <div className="mx-2 border rounded-xl h-full flex-grow overflow-hidden bg-gradient-to-br from-background via-background to-muted/5 shadow-inner">
+            <div className="m-2 lg:mx-2 border rounded-xl h-full flex-grow overflow-hidden bg-gradient-to-br from-background via-background to-muted/5 shadow-inner">
                 <ConferenceChat conference={conference} disabled={disabled} />
             </div>
         </div>
