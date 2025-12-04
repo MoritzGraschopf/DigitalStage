@@ -15,7 +15,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Check, Copy, Info, LoaderCircle } from "lucide-react";
 import ConferenceChat from "@/components/ConferenceChat";
-//import {Volume2, VolumeX} from "lucide-react";
 
 type ConferenceWithParticipants = Conference & { participants: UserConference[] };
 
@@ -42,10 +41,9 @@ function VideoTile({
     const ref = useRef<HTMLVideoElement | null>(null);
     const [muted, setMuted] = useState<boolean>(mutedByDefault);
     const [needsUserAction, setNeedsUserAction] = useState(false);
-    const isPlayingRef = useRef(false); // Verhindert Unterbrechungen während play()
+    const isPlayingRef = useRef(false);
     const currentStreamRef = useRef<MediaStream | null>(null);
 
-    // falls mutedByDefault sich jemals ändert
     useEffect(() => {
         setMuted(mutedByDefault);
     }, [mutedByDefault]);
@@ -208,43 +206,68 @@ function VideoTile({
     const hasAudio = !!stream?.getAudioTracks().some((t) => t.readyState !== "ended");
 
     return (
-        <div className="relative border rounded-md overflow-hidden">
-            <video
-                ref={ref}
-                autoPlay
-                playsInline
-                muted={isLocal ? true: muted}
-                className={`${className} bg-black ${mirror ? "scale-x-[-1]" : ""}`}
-            />
-            {!hasVideo && (
-                <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground bg-background/80">
-                    Kein Video verfügbar
-                </div>
-            )}
-            {needsUserAction && (
-                <button
-                    className="absolute inset-0 bg-black/80 text-white text-base font-medium flex items-center justify-center z-10 hover:bg-black/90 active:bg-black/95 transition-colors cursor-pointer"
-                    onClick={handleUserPlay}
-                    type="button"
-                >
-                    <div className="text-center">
-                        <div className="text-2xl mb-2">▶️</div>
-                        <div>Tippe zum Abspielen</div>
+        <div className="relative rounded-xl overflow-hidden bg-gradient-to-br from-background to-muted/30 border shadow-lg hover:shadow-xl transition-all duration-300 group">
+            <div className="relative aspect-video bg-gradient-to-br from-muted/20 to-muted/10">
+                <video
+                    ref={ref}
+                    autoPlay
+                    playsInline
+                    muted={isLocal ? true: muted}
+                    className={`${className} w-full h-full object-cover ${mirror ? "scale-x-[-1]" : ""}`}
+                />
+                {!hasVideo && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-muted/40 to-muted/20 backdrop-blur-sm">
+                        <div className="text-center">
+                            <div className="text-3xl mb-2 opacity-50">📹</div>
+                            <div className="text-sm text-muted-foreground">Kein Video</div>
+                        </div>
                     </div>
-                </button>
-            )}
-            <div className="px-2 py-1 text-xs text-muted-foreground flex items-center justify-between">
-                <span className="truncate">{title}</span>
-
-                {hasAudio && (
+                )}
+                {needsUserAction && (
                     <button
-                        className="p-1"
-                        onClick={() => setMuted(m => !m)}
-                        title={muted ? "Ton an" : "Ton aus"}
+                        className="absolute inset-0 bg-black/70 backdrop-blur-sm text-white text-base font-medium flex items-center justify-center z-10 hover:bg-black/80 active:bg-black/90 transition-all cursor-pointer"
+                        onClick={handleUserPlay}
+                        type="button"
                     >
-                        {muted ? "🔇" : "🔊"}
+                        <div className="text-center">
+                            <div className="text-4xl mb-3">▶️</div>
+                            <div className="text-sm">Tippe zum Abspielen</div>
+                        </div>
                     </button>
                 )}
+                
+                {/* Audio Status Indicator */}
+                {hasAudio && !muted && (
+                    <div className="absolute top-3 right-3 bg-green-500/90 text-white text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5 backdrop-blur-sm shadow-lg">
+                        <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></span>
+                        <span className="font-medium">Audio</span>
+                    </div>
+                )}
+
+                {/* Name and Controls Overlay */}
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent px-4 py-3">
+                    <div className="flex items-center justify-between">
+                        <span className="text-sm font-semibold text-white truncate flex-1">{title}</span>
+                        {hasAudio && (
+                            <button
+                                className="ml-3 p-2 rounded-lg bg-black/40 hover:bg-black/60 text-white transition-all flex-shrink-0 backdrop-blur-sm hover:scale-110 active:scale-95"
+                                onClick={() => setMuted(m => !m)}
+                                title={muted ? "Ton an" : "Ton aus"}
+                            >
+                                {muted ? (
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                                    </svg>
+                                ) : (
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 14.142M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                    </svg>
+                                )}
+                            </button>
+                        )}
+                    </div>
+                </div>
             </div>
         </div>
     );
@@ -441,10 +464,6 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
         role: derivedRole,
     });
 
-    // eslint-disable-next-line
-    const firstRemoteStream =
-        Object.values(remoteStreams)[0] ?? null;
-
     if (!conference) {
         return (
             <div className="h-screen w-screen fixed top-0 left-0 z-[-1] flex justify-center items-center flex-col gap-2">
@@ -459,57 +478,178 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
             <div className="h-13"></div>
             <div></div>
 
-            <div className="ml-2 border rounded-md relative h-full">
+            <div className="ml-2 border rounded-xl relative h-full bg-gradient-to-br from-background via-background to-muted/5 overflow-hidden shadow-inner">
                 {disabled ? (
-                    <div className="h-full justify-center items-center flex flex-col">
-                        <div className="font-medium text-xl">Konferenz beendet</div>
-                        <div className="text-muted-foreground">Sie können die Konferenz verlassen oder den Chatverlauf sowie die Konferenzinformationen einsehen</div>
+                    <div className="h-full justify-center items-center flex flex-col gap-4 p-8">
+                        <div className="text-5xl mb-2">🔴</div>
+                        <div className="font-semibold text-2xl">Konferenz beendet</div>
+                        <div className="text-muted-foreground text-center max-w-md">Sie können die Konferenz verlassen oder den Chatverlauf sowie die Konferenzinformationen einsehen</div>
                     </div>
                 ) : (
                     <>
                         {derivedRole === "VIEWER" ? (
-                            <div className="h-full flex items-center justify-center text-muted-foreground">
-                                Du bist <b> Zuschauer</b> – hier kommt der HLS-Player hin.
+                            <div className="h-full flex items-center justify-center text-muted-foreground p-8">
+                                <div className="text-center">
+                                    <div className="text-6xl mb-4">👁️</div>
+                                    <div className="text-xl font-medium mb-2">Du bist <b>Zuschauer</b></div>
+                                    <div className="text-sm">Hier kommt der HLS-Player hin</div>
+                                </div>
                             </div>
                         ) : (
-                            <div className="h-full p-2 grid grid-rows-[auto_1fr] gap-2">
-                                <div className="flex gap-2">
-                                    <div className="w-64 border rounded-md overflow-hidden">
-                                        <VideoTile
-                                            stream={localStream}
-                                            title={derivedRole === "ORGANIZER" ? "Du (Organizer)" : "Du"}
-                                            mutedByDefault={true}
-                                            mirror={true}
-                                            isLocal={true}
-                                            className="w-full h-40 object-cover"
-                                        />
-                                        <div className="px-2 py-1 text-sm text-muted-foreground">{derivedRole === "ORGANIZER" ? "Du (Organizer)" : "Du"}</div>
-                                    </div>
-                                </div>
-                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 overflow-auto">
-                                    {Object.entries(remoteStreams).map(([peerId, stream]) => (
-                                        <VideoTile
-                                            key={peerId}
-                                            stream={stream}
-                                            title={peerId}
-                                            mirror={false}
-                                            mutedByDefault={false}
-                                            isLocal={false}
-                                            className="w-full h-40 object-cover"
-                                        />
-                                    ))}
-                                </div>
+                            <div className="h-full relative p-4 overflow-auto">
+                                {(() => {
+                                    const remoteEntries = Object.entries(remoteStreams);
+                                    const remoteCount = remoteEntries.length;
+                                    const hasLocal = !!localStream;
+                                    const totalCount = remoteCount + (hasLocal ? 1 : 0);
+
+                                    // Keine Teilnehmer
+                                    if (totalCount === 0) {
+                                        return (
+                                            <div className="h-full flex items-center justify-center">
+                                                <div className="text-center text-muted-foreground">
+                                                    <div className="text-4xl mb-3">📹</div>
+                                                    <div>Warte auf Teilnehmer...</div>
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+
+                                    // Nur lokales Video
+                                    if (hasLocal && remoteCount === 0) {
+                                        return (
+                                            <div className="h-full flex items-center justify-center p-8">
+                                                <div className="w-full max-w-4xl">
+                                                    <VideoTile
+                                                        stream={localStream}
+                                                        title={derivedRole === "ORGANIZER" ? "Du (Organizer)" : "Du"}
+                                                        mutedByDefault={true}
+                                                        mirror={true}
+                                                        isLocal={true}
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+
+                                    // 1-2 Teilnehmer: Side-by-side oder gestapelt
+                                    if (totalCount <= 2) {
+                                        return (
+                                            <div className="h-full flex gap-4">
+                                                {hasLocal && (
+                                                    <div className="flex-1 min-w-0">
+                                                        <VideoTile
+                                                            stream={localStream}
+                                                            title={derivedRole === "ORGANIZER" ? "Du (Organizer)" : "Du"}
+                                                            mutedByDefault={true}
+                                                            mirror={true}
+                                                            isLocal={true}
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    </div>
+                                                )}
+                                                {remoteEntries.map(([peerId, stream]) => (
+                                                    <div key={peerId} className="flex-1 min-w-0">
+                                                        <VideoTile
+                                                            stream={stream}
+                                                            title={peerId}
+                                                            mirror={false}
+                                                            mutedByDefault={false}
+                                                            isLocal={false}
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        );
+                                    }
+
+                                    // 3-4 Teilnehmer: 2x2 Grid
+                                    if (totalCount <= 4) {
+                                        return (
+                                            <div className="h-full grid grid-cols-2 gap-4">
+                                                {hasLocal && (
+                                                    <VideoTile
+                                                        stream={localStream}
+                                                        title={derivedRole === "ORGANIZER" ? "Du (Organizer)" : "Du"}
+                                                        mutedByDefault={true}
+                                                        mirror={true}
+                                                        isLocal={true}
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                )}
+                                                {remoteEntries.map(([peerId, stream]) => (
+                                                    <VideoTile
+                                                        key={peerId}
+                                                        stream={stream}
+                                                        title={peerId}
+                                                        mirror={false}
+                                                        mutedByDefault={false}
+                                                        isLocal={false}
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                ))}
+                                            </div>
+                                        );
+                                    }
+
+                                    // 5+ Teilnehmer: Grid mit lokalem Video als Overlay
+                                    return (
+                                        <div className="h-full relative">
+                                            {/* Remote Videos Grid */}
+                                            <div className="h-full grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pr-4">
+                                                {remoteEntries.map(([peerId, stream]) => (
+                                                    <VideoTile
+                                                        key={peerId}
+                                                        stream={stream}
+                                                        title={peerId}
+                                                        mirror={false}
+                                                        mutedByDefault={false}
+                                                        isLocal={false}
+                                                        className="w-full aspect-video object-cover"
+                                                    />
+                                                ))}
+                                            </div>
+                                            
+                                            {/* Lokales Video als Overlay in rechter unterer Ecke */}
+                                            {hasLocal && (
+                                                <div className="absolute bottom-6 right-6 w-72 md:w-80 lg:w-96 z-20 shadow-2xl rounded-xl overflow-hidden">
+                                                    <VideoTile
+                                                        stream={localStream}
+                                                        title={derivedRole === "ORGANIZER" ? "Du (Organizer)" : "Du"}
+                                                        mutedByDefault={true}
+                                                        mirror={true}
+                                                        isLocal={true}
+                                                        className="w-full aspect-video object-cover"
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
                             </div>
                         )}
                     </>
                 )}
 
-                <div className="absolute bottom-2 left-2 flex gap-2">
-                    <Button asChild><Link href="/app"><ArrowLeft />Verlassen</Link></Button>
+                <div className="absolute bottom-4 left-4 flex gap-3 flex-wrap z-30">
+                    <Button asChild variant="outline" className="shadow-lg backdrop-blur-sm bg-background/95 hover:bg-background border-2">
+                        <Link href="/app" className="flex items-center gap-2">
+                            <ArrowLeft className="w-4 h-4" />
+                            Verlassen
+                        </Link>
+                    </Button>
 
                     {derivedRole === "ORGANIZER" && (
                         <>
-                            <Button disabled={conference.status === "ENDED"} onClick={() => setCommandOpen(true)}>Teilnehmer hinzufügen</Button>
+                            <Button 
+                                disabled={conference.status === "ENDED"} 
+                                onClick={() => setCommandOpen(true)}
+                                className="shadow-lg backdrop-blur-sm"
+                            >
+                                Teilnehmer hinzufügen
+                            </Button>
                             <CommandDialog open={commandOpen} onOpenChange={(o) => { setCommandOpen(o); if (!o) setSelectedUserIds([]); }}>
                                 <div className="m-4 space-y-2">
                                     <h1 className="text-lg font-semibold">Teilnehmer auswählen</h1>
@@ -581,7 +721,15 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                     )}
 
                     <Sheet>
-                        <SheetTrigger asChild><Button size="icon" variant="outline"><Info /></Button></SheetTrigger>
+                        <SheetTrigger asChild>
+                            <Button 
+                                size="icon" 
+                                variant="outline" 
+                                className="shadow-lg backdrop-blur-sm bg-background/95 hover:bg-background border-2"
+                            >
+                                <Info className="w-4 h-4" />
+                            </Button>
+                        </SheetTrigger>
                         <SheetContent>
                             <SheetHeader>
                                 <SheetTitle>Konferenzinfo</SheetTitle>
@@ -637,7 +785,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                 </div>
             </div>
 
-            <div className="mx-2 border rounded-md h-full flex-grow overflow-hidden">
+            <div className="mx-2 border rounded-xl h-full flex-grow overflow-hidden bg-gradient-to-br from-background via-background to-muted/5 shadow-inner">
                 <ConferenceChat conference={conference} disabled={disabled} />
             </div>
         </div>
