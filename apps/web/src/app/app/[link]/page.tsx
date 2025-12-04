@@ -28,6 +28,7 @@ type VideoTileProps = {
     mutedByDefault?: boolean;
     className?: string;
     mirror?: boolean;
+    isLocal?: boolean;
 };
 
 function VideoTile({
@@ -36,6 +37,7 @@ function VideoTile({
                               mutedByDefault = false,
                               className = "",
                               mirror = false,
+                              isLocal = false,
                           }: VideoTileProps) {
     const ref = useRef<HTMLVideoElement | null>(null);
     const [muted, setMuted] = useState<boolean>(mutedByDefault);
@@ -81,7 +83,15 @@ function VideoTile({
 
     const handleUserPlay = useCallback(() => {
         const el = ref.current;
-        if (!el || isPlayingRef.current) return; // Verhindere mehrfache Aufrufe
+        if (!el || isPlayingRef.current)
+            return;
+
+        if(isLocal){
+            el.muted = true;
+            setNeedsUserAction(false);
+            isPlayingRef.current = true;
+            return;
+        }
         
         isPlayingRef.current = true;
         setMuted(false);
@@ -97,7 +107,6 @@ function VideoTile({
                         isPlayingRef.current = false;
                     })
                     .catch((err: DOMException) => {
-                        // AbortError ignorieren und nochmal versuchen
                         if (err.name === "AbortError") {
                             console.warn("⚠️ Play interrupted, retrying...", title);
                             setTimeout(() => {
@@ -105,7 +114,7 @@ function VideoTile({
                                     setNeedsUserAction(false);
                                     isPlayingRef.current = false;
                                 } else if (ref.current) {
-                                    attemptPlay(); // Nochmal versuchen
+                                    attemptPlay();
                                 } else {
                                     isPlayingRef.current = false;
                                 }
@@ -122,13 +131,13 @@ function VideoTile({
         };
         
         attemptPlay();
-    }, [title]);
+    }, [title, isLocal]);
 
     useEffect(() => {
         const el = ref.current;
-        if (!el) return;
+        if (!el)
+            return;
 
-        // srcObject nur setzen, wenn es sich geändert hat
         if (currentStreamRef.current !== stream) {
             currentStreamRef.current = stream;
             el.srcObject = stream;
@@ -136,7 +145,6 @@ function VideoTile({
         
         el.muted = muted; // autoplay-policy safe
 
-        // Nur play versuchen, wenn nicht gerade ein manueller Play läuft
         if (!isPlayingRef.current) {
             tryPlay();
         }
@@ -156,7 +164,6 @@ function VideoTile({
 
         const onAddTrack = (ev: MediaStreamTrackEvent): void => {
             console.log("➕ track added", title, ev.track.kind);
-            // sobald ein Track da ist, nochmal play versuchen
             onMeta();
         };
 
@@ -167,7 +174,6 @@ function VideoTile({
 
         const onPause = (): void => {
             console.log("⏸️ paused", title);
-            // Nur als needsUserAction markieren, wenn es nicht absichtlich pausiert wurde
             if (el.readyState > 0 && stream.getTracks().length > 0) {
                 setNeedsUserAction(true);
             }
@@ -207,7 +213,7 @@ function VideoTile({
                 ref={ref}
                 autoPlay
                 playsInline
-                muted={muted}
+                muted={isLocal ? true: muted}
                 className={`${className} bg-black ${mirror ? "scale-x-[-1]" : ""}`}
             />
             {!hasVideo && (
@@ -250,7 +256,8 @@ function DebugRemoteVideo({ stream }: { stream: MediaStream | null }) {
 
     useEffect(() => {
         const el = ref.current;
-        if (!el) return;
+        if (!el)
+            return;
 
         if (!stream) {
             el.srcObject = null;
@@ -438,91 +445,6 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
     const firstRemoteStream =
         Object.values(remoteStreams)[0] ?? null;
 
-    useEffect(() => {
-        console.log(
-            "REMOTE STREAMS",
-            Object.fromEntries(
-                Object.entries(remoteStreams).map(([id, s]) => [
-                    id,
-                    s.getTracks().map(t => t.kind),
-                ])
-            )
-        );
-    }, [remoteStreams]);
-
-    // 🔍 DEBUG: Detaillierte Video- und Stream-Analyse
-    useEffect(() => {
-        const debugInterval = setInterval(() => {
-            const videos = document.querySelectorAll("video");
-            console.group("🔍 VIDEO DEBUG REPORT");
-            
-            videos.forEach((video, idx) => {
-                const stream = video.srcObject as MediaStream | null;
-                const tracks = stream?.getTracks() || [];
-                
-                console.group(`Video ${idx + 1} (${video.title || "no title"})`);
-                console.log("Element:", {
-                    paused: video.paused,
-                    muted: video.muted,
-                    readyState: video.readyState,
-                    videoWidth: video.videoWidth,
-                    videoHeight: video.videoHeight,
-                    currentTime: video.currentTime,
-                    autoplay: video.autoplay,
-                    playsInline: video.playsInline,
-                });
-                
-                if (stream) {
-                    console.log("Stream:", {
-                        id: stream.id,
-                        active: stream.active,
-                        trackCount: tracks.length,
-                    });
-                    
-                    tracks.forEach((track, trackIdx) => {
-                        console.log(`Track ${trackIdx + 1} (${track.kind}):`, {
-                            id: track.id,
-                            enabled: track.enabled,
-                            muted: track.muted,
-                            readyState: track.readyState,
-                            settings: track.getSettings ? track.getSettings() : "N/A",
-                            constraints: track.getConstraints ? track.getConstraints() : "N/A",
-                        });
-                        
-                        // Prüfe ob Video-Track wirklich Frames liefert
-                        if (track.kind === "video") {
-                            // eslint-disable-next-line
-                            const stats = (track as any).getStats ? (track as any).getStats() : null;
-                            if (stats) {
-                                console.log("Video Track Stats:", stats);
-                            }
-                        }
-                    });
-                } else {
-                    console.warn("⚠️ No srcObject set!");
-                }
-                console.groupEnd();
-            });
-            
-            console.log("Remote Streams State:", Object.keys(remoteStreams).map(userId => ({
-                userId,
-                stream: remoteStreams[userId],
-                tracks: remoteStreams[userId]?.getTracks().map(t => ({
-                    kind: t.kind,
-                    id: t.id,
-                    enabled: t.enabled,
-                    muted: t.muted,
-                    readyState: t.readyState,
-                })),
-            })));
-            
-            console.groupEnd();
-        }, 5000); // Alle 5 Sekunden
-        
-        return () => clearInterval(debugInterval);
-    }, [remoteStreams]);
-
-
     if (!conference) {
         return (
             <div className="h-screen w-screen fixed top-0 left-0 z-[-1] flex justify-center items-center flex-col gap-2">
@@ -558,6 +480,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                             title={derivedRole === "ORGANIZER" ? "Du (Organizer)" : "Du"}
                                             mutedByDefault={true}
                                             mirror={true}
+                                            isLocal={true}
                                             className="w-full h-40 object-cover"
                                         />
                                         <div className="px-2 py-1 text-sm text-muted-foreground">{derivedRole === "ORGANIZER" ? "Du (Organizer)" : "Du"}</div>
@@ -571,6 +494,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                             title={peerId}
                                             mirror={false}
                                             mutedByDefault={false}
+                                            isLocal={false}
                                             className="w-full h-40 object-cover"
                                         />
                                     ))}
