@@ -55,7 +55,6 @@ function VideoTile({
         if (playPromise) {
             playPromise
                 .then(() => {
-                    // Prüfe nach kurzer Zeit, ob das Video wirklich spielt
                     setTimeout(() => {
                         if (el.paused || el.readyState === 0) {
                             console.warn("Video paused or not ready after play()", title);
@@ -70,7 +69,6 @@ function VideoTile({
                     setNeedsUserAction(true);
                 });
         } else {
-            // Falls play() undefined zurückgibt, prüfe den Status
             setTimeout(() => {
                 if (el.paused || el.readyState === 0) {
                     setNeedsUserAction(true);
@@ -194,7 +192,6 @@ function VideoTile({
 
         return () => {
             clearTimeout(checkTimeout);
-            // Handler entfernen
             stream.onaddtrack = null;
             el.removeEventListener("loadedmetadata", onMeta);
             el.removeEventListener("playing", onPlaying);
@@ -272,46 +269,6 @@ function VideoTile({
         </div>
     );
 }
-
-// eslint-disable-next-line
-function DebugRemoteVideo({ stream }: { stream: MediaStream | null }) {
-    const ref = useRef<HTMLVideoElement | null>(null);
-
-    useEffect(() => {
-        const el = ref.current;
-        if (!el)
-            return;
-
-        if (!stream) {
-            el.srcObject = null;
-            return;
-        }
-
-        if (el.srcObject !== stream) {
-            el.srcObject = stream;
-        }
-
-        el.muted = true;
-
-        el.play().catch((err) => {
-            console.warn("Debug video play failed:", err.name, err.message);
-        });
-    }, [stream]);
-
-    return (
-        <div className="border rounded-md m-2 p-1">
-            <div className="text-xs text-muted-foreground mb-1">DEBUG Remote Video</div>
-            <video
-                ref={ref}
-                autoPlay
-                playsInline
-                muted
-                style={{ width: "320px", height: "240px", background: "black" }}
-            />
-        </div>
-    );
-}
-
 
 export default function Page({ params }: { params: Promise<{ link: string }> }) {
     const { link } = use(params);
@@ -470,7 +427,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
         if (foundUser) {
             return `${foundUser.firstName}${foundUser.lastName ? ` ${foundUser.lastName}` : ""}`;
         }
-        return peerId; // Fallback zu ID falls User nicht gefunden
+        return peerId;
     }, [allUsers]);
 
     if (!conference) {
@@ -493,7 +450,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                     <Button asChild variant="ghost" size="sm">
                         <Link href="/app" className="flex items-center gap-1.5">
                             <ArrowLeft className="w-4 h-4" />
-                            <span>Zurück</span>
+                            <span>Verlassen</span>
                         </Link>
                     </Button>
                     {derivedRole === "ORGANIZER" && (
