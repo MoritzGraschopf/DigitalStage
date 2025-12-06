@@ -262,6 +262,18 @@ wss.on("connection", (ws) => {
             return;
         }
 
+        if (msg.type === "ConferenceParticipantsRemoved") {
+            wss.clients.forEach((client) => {
+                client.send(JSON.stringify({
+                    type: "server:ConferenceParticipantsRemoved",
+                    conferenceId: msg.conferenceId,
+                    userIds: msg.userIds,
+                    link: msg.link,
+                }));
+            });
+            return;
+        }
+
         /* =========================
            ✅ CHANGED: SFU handlers now answer with sfu:response
            ========================= */
