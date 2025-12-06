@@ -17,6 +17,7 @@ type DtlsParameters = mediasoupClient.types.DtlsParameters;
 type IceParameters = mediasoupClient.types.IceParameters;
 type IceCandidate = mediasoupClient.types.IceCandidate;
 type SctpParameters = mediasoupClient.types.SctpParameters;
+type Producer = mediasoupClient.types.Producer;
 
 // ---- SFU WS Message Shapes
 type SfuRequestType =
@@ -118,7 +119,10 @@ export function useWebRTC(params: {
     const deviceRef = useRef<Device | null>(null);
     const sendTransportRef = useRef<Transport | null>(null);
     const recvTransportRef = useRef<Transport | null>(null);
-
+    const screenProducerRef = useRef<Producer | null>(null);
+    const screenStreamRef = useRef<MediaStream | null>(null);
+    const [isScreenSharing, setIsScreenSharing] = useState(false);
+    const [localScreenStream, setLocalScreenStream] = useState<MediaStream | null>(null);
     const pendingRef = useRef<Map<string, Pending<unknown>>>(new Map());
     const remoteStreamsRef = useRef<Map<string, MediaStream>>(new Map());
     const pendingNewProducersRef = useRef<
@@ -420,6 +424,76 @@ export function useWebRTC(params: {
         return () => socket.removeEventListener("message", onMessage);
     }, [socket, consume]);
 
+    const stopScreenShare = useCallback(() => {
+        const screenStream = screenStreamRef.current;
+        if (screenStream) {
+            screenStream.getTracks().forEach((t) => {
+                try { t.stop(); } catch { /* ignore */ }
+            });
+            screenStreamRef.current = null;
+            setLocalScreenStream(null);
+        }
+
+        const producer = screenProducerRef.current;
+        if (producer) {
+            try { producer.close(); } catch { /* ignore */ }
+            screenProducerRef.current = null;
+        }
+
+        setIsScreenSharing(false);
+    }, []);
+
+    const startScreenShare = useCallback(async () => {
+        const sendTransport = sendTransportRef.current;
+        const device = deviceRef.current;
+
+        if (!sendTransport || !device) {
+            console.warn("startScreenShare: kein sendTransport oder Device");
+            return;
+        }
+
+        if (screenProducerRef.current) {
+            console.warn("startScreenShare: bereits aktiv");
+            return;
+        }
+
+        if (!device.canProduce("video")) {
+            console.warn("startScreenShare: device.canProduce('video') = false");
+            return;
+        }
+
+        try {
+            const stream = await navigator.mediaDevices.getDisplayMedia({
+                video: true
+            });
+
+            const track = stream.getVideoTracks()[0];
+            if (!track) {
+                console.warn("startScreenShare: kein Video-Track");
+                stream.getTracks().forEach(t => t.stop());
+                return;
+            }
+
+            screenStreamRef.current = stream;
+            setLocalScreenStream(stream);
+            track.onended = () => {
+                console.log("Screen track ended -> stopScreenShare()");
+                stopScreenShare();
+            };
+
+            const producer = await sendTransport.produce({
+                track,
+                // optional, falls du später unterscheiden willst (Server kann appData schon)
+                // appData: { mediaTag: "screen" },
+            });
+
+            screenProducerRef.current = producer;
+            setIsScreenSharing(true);
+        } catch (e) {
+            console.error("startScreenShare failed:", e);
+        }
+    }, [stopScreenShare]);
+
     // ----- Join + Device init
     useEffect(() => {
         if (!userId || !conferenceId) return;
@@ -445,7 +519,8 @@ export function useWebRTC(params: {
             const recvOpts = await request<SfuCreateTransportRes>("sfu:create-transport", {
                 direction: "recv" as TransportDirection,
             });
-            if (!mounted) return;
+            if (!mounted)
+                return;
 
             const recvTransport = device.createRecvTransport({
                 ...recvOpts,
@@ -569,6 +644,20 @@ export function useWebRTC(params: {
             recvTransportRef.current = null;
             deviceRef.current = null;
 
+            const screenStream = screenStreamRef.current;
+            if (screenStream) {
+                screenStream.getTracks().forEach((t) => {
+                    try { t.stop(); } catch { /* ignore */ }
+                });
+                screenStreamRef.current = null;
+                setLocalScreenStream(null);
+            }
+            if (screenProducerRef.current) {
+                try { screenProducerRef.current.close(); } catch { /* ignore */ }
+                screenProducerRef.current = null;
+            }
+            setIsScreenSharing(false);
+
             remoteStreamsRef.current.forEach((stream) => {
                 stream.getTracks().forEach((track) => {
                     try {
@@ -593,5 +682,12 @@ export function useWebRTC(params: {
     }, [userId, conferenceId, role, consume, request, processPendingNewProducers, iceServers]);
 
 
-    return { localStream, remoteStreams };
+    return {
+        localStream,
+        remoteStreams,
+        startScreenShare,
+        stopScreenShare,
+        isScreenSharing,
+        localScreenStream
+    };
 }
