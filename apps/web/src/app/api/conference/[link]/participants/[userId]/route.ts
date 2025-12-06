@@ -28,17 +28,18 @@ export async function DELETE(
 
         const existing = await prisma.userConference.findUnique({
            where: {userId_conferenceId: {userId, conferenceId: conf.id}},
-           select: {userId: true}
+           select: {userId: true, role: true}
         });
 
         if(!existing)
             return NextResponse.json({message: 'Participation not found'});
 
-        await prisma.userConference.delete({
-            where: {userId_conferenceId: {userId, conferenceId: conf.id}}
+        await prisma.userConference.update({
+            where: {userId_conferenceId: {userId, conferenceId: conf.id}},
+            data: {role: 'VIEWER'}
         });
 
-        return NextResponse.json({message: 'Removed'}, {status: 200});
+        return NextResponse.json({message: 'Removed from participants (set to viewer)'}, {status: 200});
     }
     catch(err){
         return NextResponse.json({message: 'Internal Server Error', err}, {status: 500});

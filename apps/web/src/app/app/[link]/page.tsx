@@ -13,7 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Check, Copy, Info, LoaderCircle, MessageCircle } from "lucide-react";
+import { ArrowLeft, Check, Copy, Info, LoaderCircle, MessageCircle, X } from "lucide-react";
 import ConferenceChat from "@/components/ConferenceChat";
 
 type ConferenceWithParticipants = Conference & { participants: UserConference[] };
@@ -349,11 +349,22 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
 
     useEffect(() => {
         fetchConference();
-        const off = ws.on("server:ConferenceParticipantsAdded", (msg: unknown) => {
+        const off1 = ws.on("server:ConferenceParticipantsAdded", (msg: unknown) => {
             const m = msg as { conferenceId?: string };
-            if (m?.conferenceId && m.conferenceId === conference?.id) fetchConference();
+            if (m?.conferenceId && m.conferenceId === conference?.id) {
+                fetchConference();
+            }
         });
-        return () => off();
+        const off2 = ws.on("server:ConferenceParticipantsRemoved", (msg: unknown) => {
+            const m = msg as { conferenceId?: string };
+            if (m?.conferenceId && m.conferenceId === conference?.id) {
+                fetchConference();
+            }
+        });
+        return () => {
+            off1();
+            off2();
+        };
     }, [ws, conference?.id, fetchConference]);
 
     useEffect(() => {
@@ -448,8 +459,22 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
             ws.send({ type: "ConferenceParticipantsAdded", conferenceId: conference.id, userIds: selectedUserIds, link: conference.link });
             setSelectedUserIds([]);
             setCommandOpen(false);
+            fetchConference(); // Sofort aktualisieren
         } catch (e) {
             console.error("Teilnehmer hinzufügen fehlgeschlagen:", e);
+        }
+    };
+
+    const handleRemoveParticipant = async (userId: string) => {
+        try {
+            if (!conference) return;
+            await fetchWithAuth(`/api/conference/${conference.link}/participants/${userId}`, {
+                method: "DELETE",
+            });
+            ws.send({ type: "ConferenceParticipantsRemoved", conferenceId: conference.id, userIds: [userId], link: conference.link });
+            fetchConference(); // Sofort aktualisieren
+        } catch (e) {
+            console.error("Teilnehmer entfernen fehlgeschlagen:", e);
         }
     };
 
@@ -751,7 +776,25 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                         <div className="pt-2">
                                             <div className="mb-1 text-xs font-medium text-muted-foreground">Aktuelle Teilnehmer</div>
                                             <div className="flex flex-wrap gap-1">
-                                                {currentParticipants.map((u) => <Badge key={u.id} variant="outline">{u.firstName} {u.lastName ?? ""}</Badge>)}
+                                                {currentParticipants.map((u) => (
+                                                    <Badge 
+                                                        key={u.id} 
+                                                        variant="outline" 
+                                                        className="flex items-center gap-1 pr-1"
+                                                    >
+                                                        <span>{u.firstName} {u.lastName ?? ""}</span>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleRemoveParticipant(u.id);
+                                                            }}
+                                                            className="ml-1 hover:bg-destructive/20 rounded-full p-0.5 transition-colors"
+                                                            title="Teilnehmer entfernen"
+                                                        >
+                                                            <X className="w-3 h-3" />
+                                                        </button>
+                                                    </Badge>
+                                                ))}
                                             </div>
                                         </div>
                                     )}
