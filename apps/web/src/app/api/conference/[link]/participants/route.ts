@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserIdFromAuthHeader } from "@/lib/auth";
+import { Role } from "@prisma/client";
 
 const MAX_PARTICIPANTS = 11; // inkl. Organizer
 
@@ -108,7 +109,7 @@ export async function POST(
         let added: Array<{
             userId: string;
             conferenceId: string;
-            role: "PARTICIPANT" | "ORGANIZER" | "VIEWER";
+            role: Role;
             user: { id: string; email: string | null; firstName: string | null; lastName: string | null };
         }> = [];
 

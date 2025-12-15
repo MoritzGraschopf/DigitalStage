@@ -274,6 +274,42 @@ wss.on("connection", (ws) => {
             return;
         }
 
+        if (msg.type === "PresenterChanged") {
+            wss.clients.forEach((client) => {
+                client.send(JSON.stringify({
+                    type: "server:PresenterChanged",
+                    conferenceId: msg.conferenceId,
+                    presenterUserId: msg.presenterUserId,
+                    link: msg.link,
+                }));
+            });
+            return;
+        }
+
+        if (msg.type === "QuestionerActivated") {
+            wss.clients.forEach((client) => {
+                client.send(JSON.stringify({
+                    type: "server:QuestionerActivated",
+                    conferenceId: msg.conferenceId,
+                    userId: msg.userId,
+                    link: msg.link,
+                }));
+            });
+            return;
+        }
+
+        if (msg.type === "QuestionerDeactivated") {
+            wss.clients.forEach((client) => {
+                client.send(JSON.stringify({
+                    type: "server:QuestionerDeactivated",
+                    conferenceId: msg.conferenceId,
+                    userId: msg.userId,
+                    link: msg.link,
+                }));
+            });
+            return;
+        }
+
         /* =========================
            ✅ CHANGED: SFU handlers now answer with sfu:response
            ========================= */

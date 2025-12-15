@@ -34,6 +34,7 @@ const conferenceScheme = z.object({
     startAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
     endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
     userIds: z.array(z.string()).max(10, { error: "Maximal 10 Teilnehmer auswählbar." }),
+    presenterUserId: z.string().optional(),
 }).refine((d) => {
     const s = new Date(d.startAt);
     const e = new Date(d.endDate);
@@ -75,10 +76,12 @@ const NewConferenceSheet: React.FC<NewConferenceSheetProps> = ({open, setOpen}) 
             startAt: toYYYYMMDDTHHMM(now),
             endDate: toYYYYMMDDTHHMM(inOneHour),
             userIds: [],
+            presenterUserId: undefined,
         },
     });
 
     const selectedIds = form.watch("userIds") ?? [];
+    const presenterUserId = form.watch("presenterUserId");
 
     const toggleUser = React.useCallback((id: string) => {
         // eigenen User blocken
@@ -120,6 +123,7 @@ const NewConferenceSheet: React.FC<NewConferenceSheetProps> = ({open, setOpen}) 
                     startAt: values.startAt,
                     endDate: values.endDate,
                     userIds: values.userIds,
+                    presenterUserId: values.presenterUserId,
                 }),
             });
 
@@ -134,6 +138,7 @@ const NewConferenceSheet: React.FC<NewConferenceSheetProps> = ({open, setOpen}) 
                 startAt: toYYYYMMDDTHHMM(new Date()),
                 endDate: toYYYYMMDDTHHMM(new Date(Date.now() + 60 * 60 * 1000)),
                 userIds: [],
+                presenterUserId: undefined,
             });
             setOpen(false);
 
@@ -319,6 +324,98 @@ const NewConferenceSheet: React.FC<NewConferenceSheetProps> = ({open, setOpen}) 
                                                                 </CommandItem>
                                                             );
                                                         })}
+                                                    </CommandGroup>
+                                                </CommandList>
+                                            </Command>
+                                        </FormControl>
+
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            <FormField
+                                control={form.control}
+                                name="presenterUserId"
+                                render={() => (
+                                    <FormItem>
+                                        <FormLabel>Präsentator (optional)</FormLabel>
+                                        <FormDescription>
+                                            Wähle einen Präsentator aus. Du kannst dies auch später in der Konferenz ändern.
+                                        </FormDescription>
+
+                                        {presenterUserId && (
+                                            <div className="mt-2">
+                                                {(() => {
+                                                    const presenter = users.find(u => u.id === presenterUserId);
+                                                    return presenter ? (
+                                                        <Badge
+                                                            variant="default"
+                                                            className="cursor-pointer"
+                                                            onClick={() => form.setValue("presenterUserId", undefined)}
+                                                        >
+                                                            {presenter.firstName} {presenter.lastName ?? ""} (Präsentator)
+                                                        </Badge>
+                                                    ) : null;
+                                                })()}
+                                            </div>
+                                        )}
+
+                                        <FormControl>
+                                            <Command className="rounded-md border">
+                                                <CommandInput placeholder="Präsentator suchen..." />
+                                                <CommandList>
+                                                    <CommandEmpty>Keine User gefunden.</CommandEmpty>
+                                                    <CommandGroup heading="Als Präsentator auswählen">
+                                                        {/* Organizer (selbst) */}
+                                                        {user && (
+                                                            <CommandItem
+                                                                onSelect={() => {
+                                                                    const newValue = presenterUserId === user.id ? undefined : user.id;
+                                                                    form.setValue("presenterUserId", newValue);
+                                                                }}
+                                                                className="flex items-center gap-2"
+                                                            >
+                                                                <div onClick={(e) => e.stopPropagation()}>
+                                                                    <Checkbox
+                                                                        checked={presenterUserId === user.id}
+                                                                        onCheckedChange={() => {
+                                                                            const newValue = presenterUserId === user.id ? undefined : user.id;
+                                                                            form.setValue("presenterUserId", newValue);
+                                                                        }}
+                                                                    />
+                                                                </div>
+                                                                <span className="truncate">
+                                                                    {user.firstName} {user.lastName ?? ""} (Du - Organizer)
+                                                                </span>
+                                                            </CommandItem>
+                                                        )}
+                                                        {/* Ausgewählte Teilnehmer */}
+                                                        {users
+                                                            .filter((u) => selectedIds.includes(u.id))
+                                                            .map((u) => (
+                                                                <CommandItem
+                                                                    key={u.id}
+                                                                    onSelect={() => {
+                                                                        const newValue = presenterUserId === u.id ? undefined : u.id;
+                                                                        form.setValue("presenterUserId", newValue);
+                                                                    }}
+                                                                    className="flex items-center gap-2"
+                                                                >
+                                                                    <div onClick={(e) => e.stopPropagation()}>
+                                                                        <Checkbox
+                                                                            checked={presenterUserId === u.id}
+                                                                            onCheckedChange={() => {
+                                                                                const newValue = presenterUserId === u.id ? undefined : u.id;
+                                                                                form.setValue("presenterUserId", newValue);
+                                                                            }}
+                                                                        />
+                                                                    </div>
+                                                                    <span className="truncate">
+                                                                        {u.firstName} {u.lastName ?? ""}
+                                                                    </span>
+                                                                </CommandItem>
+                                                            ))}
                                                     </CommandGroup>
                                                 </CommandList>
                                             </Command>

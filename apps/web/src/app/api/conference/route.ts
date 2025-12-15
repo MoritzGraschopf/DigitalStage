@@ -33,7 +33,8 @@ export async function POST(req: NextRequest){
             description,
             startAt,
             endDate,
-            userIds = []
+            userIds = [],
+            presenterUserId
         } = body ?? {};
 
         if(!title || typeof title !== 'string'){
@@ -41,6 +42,16 @@ export async function POST(req: NextRequest){
         }
 
         const link = randomUUID();
+
+        // Validiere presenterUserId falls angegeben
+        let presenterData: { isPresenter: boolean } | undefined = undefined;
+        if (presenterUserId) {
+            // Präsentator muss in userIds oder organizerId sein
+            if (presenterUserId !== organizerId && !userIds.includes(presenterUserId)) {
+                return NextResponse.json({ message: "Presenter must be organizer or one of the participants" }, { status: 400 });
+            }
+            presenterData = { isPresenter: true };
+        }
 
         const conference = await prisma.conference.create({
             data: {
@@ -53,8 +64,16 @@ export async function POST(req: NextRequest){
                 organizerId,
                 participants: {
                     create: [
-                        {userId: organizerId, role: 'ORGANIZER'},
-                        ...userIds.map((uid: number) => ({userId: uid, role: 'PARTICIPANT'}))
+                        {
+                            userId: organizerId,
+                            role: 'ORGANIZER',
+                            ...(presenterUserId === organizerId ? presenterData : {})
+                        },
+                        ...userIds.map((uid: string) => ({
+                            userId: uid,
+                            role: 'PARTICIPANT',
+                            ...(presenterUserId === uid ? presenterData : {})
+                        }))
                     ]
                 }
             },

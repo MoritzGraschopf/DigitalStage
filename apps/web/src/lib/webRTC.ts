@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as mediasoupClient from "mediasoup-client";
 
-type Role = "ORGANIZER" | "PARTICIPANT" | "VIEWER";
+type Role = "ORGANIZER" | "PARTICIPANT" | "VIEWER" | "QUESTIONER";
 
 type SignalSocket = {
     addEventListener: (ev: "message", cb: (ev: MessageEvent) => void) => void;
