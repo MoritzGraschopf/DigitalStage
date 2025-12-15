@@ -47,6 +47,7 @@ export async function GET(
                     select: {
                         role: true,
                         userId: true,
+                        isPresenter: true,
                         user: { select: { id: true, firstName: true, lastName: true, email: true } }
                     }
                 }

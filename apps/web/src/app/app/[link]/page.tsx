@@ -13,10 +13,15 @@ import { Separator } from "@/components/ui/separator";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Check, Copy, Info, LoaderCircle, MessageCircle, X, Monitor, MonitorOff } from "lucide-react";
+import { ArrowLeft, Check, Copy, Info, LoaderCircle, MessageCircle, X, Monitor, MonitorOff, Crown, Mic, MicOff } from "lucide-react";
 import ConferenceChat from "@/components/ConferenceChat";
 
-type ConferenceWithParticipants = Conference & { participants: UserConference[] };
+type ConferenceWithParticipants = Conference & { 
+    participants: Array<UserConference & { isPresenter?: boolean }> 
+};
+
+// Erweitere Role-Type für TypeScript (bis Prisma generate ausgeführt wurde)
+type ExtendedRole = "ORGANIZER" | "PARTICIPANT" | "VIEWER" | "QUESTIONER";
 
 const mapStatus = (status: string): string =>
     ({ SCHEDULED: "Geplant", ACTIVE: "Aktiv", ENDED: "Beendet" } as const)[status] ?? "Unbekannt";
@@ -318,9 +323,30 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                 fetchConference();
             }
         });
+        const off3 = ws.on("server:PresenterChanged", (msg: unknown) => {
+            const m = msg as { conferenceId?: string };
+            if (m?.conferenceId && m.conferenceId === conference?.id) {
+                fetchConference();
+            }
+        });
+        const off4 = ws.on("server:QuestionerActivated", (msg: unknown) => {
+            const m = msg as { conferenceId?: string };
+            if (m?.conferenceId && m.conferenceId === conference?.id) {
+                fetchConference();
+            }
+        });
+        const off5 = ws.on("server:QuestionerDeactivated", (msg: unknown) => {
+            const m = msg as { conferenceId?: string };
+            if (m?.conferenceId && m.conferenceId === conference?.id) {
+                fetchConference();
+            }
+        });
         return () => {
             off1();
             off2();
+            off3();
+            off4();
+            off5();
         };
     }, [ws, conference?.id, fetchConference]);
 
@@ -348,26 +374,45 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
     }, [conference?.organizerId, allUsers, conference]);
 
 
-    const derivedRole: "VIEWER" | "PARTICIPANT" | "ORGANIZER" = useMemo(() => {
+    const derivedRole: ExtendedRole = useMemo(() => {
         if (!conference || !user?.id) return "VIEWER";
         if (conference.organizerId === user.id) return "ORGANIZER";
         const uc = conference.participants.find(p => p.userId === user.id);
-        return uc?.role === "PARTICIPANT" ? "PARTICIPANT" : "VIEWER";
+        if (!uc) return "VIEWER";
+        return uc.role as ExtendedRole;
+    }, [conference, user?.id]);
+
+    // Aktueller Präsentator
+    const currentPresenter = useMemo(() => {
+        if (!conference) return null;
+        const presenter = conference.participants.find(p => p.isPresenter);
+        if (!presenter) return null;
+        return allUsers.find(u => u.id === presenter.userId) ?? null;
+    }, [conference, allUsers]);
+
+    // Ist der aktuelle User der Präsentator?
+    const isCurrentUserPresenter = useMemo(() => {
+        if (!conference || !user?.id) return false;
+        const uc = conference.participants.find(p => p.userId === user.id);
+        return uc?.isPresenter ?? false;
     }, [conference, user?.id]);
 
     useEffect(() => {
         if (!user?.id || !conference?.id) return;
 
+        // QUESTIONER und PARTICIPANT/ORGANIZER haben WebRTC-Verbindung, VIEWER nicht
+        const inConference = derivedRole !== "VIEWER";
+
         const payloadKey = JSON.stringify({
             userId: user.id,
             conferenceId: conference.id,
-            inConference: derivedRole !== "VIEWER",
+            inConference,
         });
 
         if(lastInitRef.current === payloadKey)
             return;
 
-        ws.send({ type: "init", userId: user.id, inConference: derivedRole !== "VIEWER", conferenceId: conference.id });
+        ws.send({ type: "init", userId: user.id, inConference, conferenceId: conference.id });
         lastInitRef.current = payloadKey;
     }, [ws, user?.id, conference?.id, derivedRole]);
 
@@ -379,12 +424,25 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
 
     const currentParticipants = useMemo(() => {
         if (!conference) return [] as User[];
-        const parts = conference.participants.filter(p => p.role === "PARTICIPANT");
+        // Teilnehmer: PARTICIPANT oder QUESTIONER (aber nicht Organizer)
+        const parts = conference.participants.filter(p => {
+            const role = p.role as ExtendedRole;
+            return (role === "PARTICIPANT" || role === "QUESTIONER") && p.userId !== conference.organizerId;
+        });
         const mapById = new Map(allUsers.map(u => [u.id, u]));
         return parts
             .map(p => mapById.get(p.userId))
-            .filter((u): u is User => !!u)
-            .filter(u => u.id !== conference.organizerId);
+            .filter((u): u is User => !!u);
+    }, [conference, allUsers]);
+
+    // Zuschauer (VIEWER)
+    const currentViewers = useMemo(() => {
+        if (!conference) return [] as User[];
+        const viewers = conference.participants.filter(p => p.role === "VIEWER");
+        const mapById = new Map(allUsers.map(u => [u.id, u]));
+        return viewers
+            .map(p => mapById.get(p.userId))
+            .filter((u): u is User => !!u);
     }, [conference, allUsers]);
 
     const maxTotal = 10;
@@ -439,6 +497,73 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
             fetchConference(); // Sofort aktualisieren
         } catch (e) {
             console.error("Teilnehmer entfernen fehlgeschlagen:", e);
+        }
+    };
+
+    const handleSetPresenter = async (userId: string | null) => {
+        try {
+            if (!conference) return;
+            if (userId) {
+                await fetchWithAuth(`/api/conference/${conference.link}/presenter`, {
+                    method: "POST",
+                    body: JSON.stringify({ userId }),
+                });
+                ws.send({ 
+                    type: "PresenterChanged", 
+                    conferenceId: conference.id, 
+                    presenterUserId: userId, 
+                    link: conference.link 
+                });
+            } else {
+                await fetchWithAuth(`/api/conference/${conference.link}/presenter`, {
+                    method: "DELETE",
+                });
+                ws.send({ 
+                    type: "PresenterChanged", 
+                    conferenceId: conference.id, 
+                    presenterUserId: null, 
+                    link: conference.link 
+                });
+            }
+            fetchConference();
+        } catch (e) {
+            console.error("Präsentator setzen fehlgeschlagen:", e);
+        }
+    };
+
+    const handleActivateQuestioner = async (userId: string) => {
+        try {
+            if (!conference) return;
+            await fetchWithAuth(`/api/conference/${conference.link}/questioner/${userId}`, {
+                method: "POST",
+            });
+            ws.send({ 
+                type: "QuestionerActivated", 
+                conferenceId: conference.id, 
+                userId, 
+                link: conference.link 
+            });
+            fetchConference();
+        } catch (e) {
+            console.error("Fragesteller aktivieren fehlgeschlagen:", e);
+        }
+    };
+
+    const handleDeactivateQuestioner = async (userId: string) => {
+        try {
+            if (!conference) return;
+            await fetchWithAuth(`/api/conference/${conference.link}/questioner/${userId}`, {
+                method: "DELETE",
+            });
+            ws.send({ 
+                type: "QuestionerDeactivated", 
+                conferenceId: conference.id, 
+                userId, 
+                link: conference.link 
+            });
+            fetchConference();
+        } catch (e) {
+            console.error("Fragesteller deaktivieren fehlgeschlagen:", e);
         }
     };
 
@@ -612,12 +737,21 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                 ) : (
                     <>
                         {derivedRole === "VIEWER" ? (
-                            <div className="h-full flex items-center justify-center text-muted-foreground p-8">
-                                <div className="text-center">
+                            <div className="h-full flex flex-col items-center justify-center text-muted-foreground p-8">
+                                <div className="text-center mb-6">
                                     <div className="text-6xl mb-4">👁️</div>
                                     <div className="text-xl font-medium mb-2">Du bist <b>Zuschauer</b></div>
                                     <div className="text-sm">Hier kommt der HLS-Player hin</div>
                                 </div>
+                                {currentPresenter && (
+                                    <div className="text-center">
+                                        <div className="text-sm text-muted-foreground mb-1">Aktueller Präsentator:</div>
+                                        <Badge variant="default" className="flex items-center gap-1 w-fit mx-auto">
+                                            <Crown className="w-3 h-3" />
+                                            {currentPresenter.firstName} {currentPresenter.lastName ?? ""}
+                                        </Badge>
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             <div className="h-full relative flex flex-col p-2 sm:p-3 md:p-4 gap-3 sm:gap-4">
@@ -632,6 +766,16 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                     // Layout mit Screenshare: Teilnehmer oben, Screenshare unten
                                     return (
                                         <>
+                                            {/* Präsentator-Info */}
+                                            {currentPresenter && (
+                                                <div className="flex-shrink-0 flex items-center justify-center gap-2 p-2 bg-muted/30 rounded-lg mb-2">
+                                                    <Crown className="w-4 h-4 text-yellow-500" />
+                                                    <span className="text-sm font-medium">
+                                                        Präsentator: {currentPresenter.firstName} {currentPresenter.lastName ?? ""}
+                                                    </span>
+                                                </div>
+                                            )}
+
                                             {/* Teilnehmer-Videos oben in horizontaler Leiste */}
                                             <div className={`flex-shrink-0 ${hasScreenShare ? 'h-32 sm:h-40' : 'flex-1 min-h-0'}`}>
                                                 {totalParticipants === 0 ? (
@@ -647,7 +791,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                                             <div className="flex-shrink-0 w-48 sm:w-56 md:w-64">
                                                                 <VideoTile
                                                                     stream={localStream}
-                                                                    title={derivedRole === "ORGANIZER" ? "Du (Organizer)" : "Du"}
+                                                                    title={isCurrentUserPresenter ? "Du (Präsentator)" : (derivedRole === "ORGANIZER" ? "Du (Organizer)" : derivedRole === "QUESTIONER" ? "Du (Fragesteller)" : "Du")}
                                                                     mutedByDefault={true}
                                                                     mirror={true}
                                                                     isLocal={true}
@@ -655,18 +799,26 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                                                 />
                                                             </div>
                                                         )}
-                                                        {participantEntries.map(([peerId, stream]) => (
-                                                            <div key={peerId} className="flex-shrink-0 w-48 sm:w-56 md:w-64">
-                                                                <VideoTile
-                                                                    stream={stream}
-                                                                    title={getUserName(peerId)}
-                                                                    mirror={false}
-                                                                    mutedByDefault={false}
-                                                                    isLocal={false}
-                                                                    className="w-full h-full object-cover"
-                                                                />
-                                                            </div>
-                                                        ))}
+                                                        {participantEntries.map(([peerId, stream]) => {
+                                                            const peerUC = conference?.participants.find(p => p.userId === peerId);
+                                                            const isPeerPresenter = peerUC?.isPresenter ?? false;
+                                                            const isPeerQuestioner = (peerUC?.role as ExtendedRole | undefined) === "QUESTIONER";
+                                                            let title = getUserName(peerId);
+                                                            if (isPeerPresenter) title += " (Präsentator)";
+                                                            if (isPeerQuestioner) title += " (Fragesteller)";
+                                                            return (
+                                                                <div key={peerId} className="flex-shrink-0 w-48 sm:w-56 md:w-64">
+                                                                    <VideoTile
+                                                                        stream={stream}
+                                                                        title={title}
+                                                                        mirror={false}
+                                                                        mutedByDefault={false}
+                                                                        isLocal={false}
+                                                                        className="w-full h-full object-cover"
+                                                                    />
+                                                                </div>
+                                                            );
+                                                        })}
                                                     </div>
                                                 )}
                                             </div>
@@ -695,7 +847,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                                     ) : null}
                                                     
                                                     {/* Screenshare-Controls */}
-                                                    {(derivedRole === "ORGANIZER" || derivedRole === "PARTICIPANT") && (
+                                                    {(derivedRole === "ORGANIZER" || derivedRole === "PARTICIPANT" || derivedRole === "QUESTIONER") && (
                                                         <div className="absolute top-4 right-4 z-30">
                                                             <Button
                                                                 onClick={isScreenSharing ? stopScreenShare : startScreenShare}
@@ -730,55 +882,71 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                                             {hasLocal && (
                                                                 <VideoTile
                                                                     stream={localStream}
-                                                                    title={derivedRole === "ORGANIZER" ? "Du (Organizer)" : "Du"}
+                                                                    title={isCurrentUserPresenter ? "Du (Präsentator)" : (derivedRole === "ORGANIZER" ? "Du (Organizer)" : derivedRole === "QUESTIONER" ? "Du (Fragesteller)" : "Du")}
                                                                     mutedByDefault={true}
                                                                     mirror={true}
                                                                     isLocal={true}
                                                                     className="w-full h-full object-cover"
                                                                 />
                                                             )}
-                                                            {participantEntries.map(([peerId, stream]) => (
-                                                                <VideoTile
-                                                                    key={peerId}
-                                                                    stream={stream}
-                                                                    title={getUserName(peerId)}
-                                                                    mirror={false}
-                                                                    mutedByDefault={false}
-                                                                    isLocal={false}
-                                                                    className="w-full h-full object-cover"
-                                                                />
-                                                            ))}
+                                                            {participantEntries.map(([peerId, stream]) => {
+                                                                const peerUC = conference?.participants.find(p => p.userId === peerId);
+                                                                const isPeerPresenter = peerUC?.isPresenter ?? false;
+                                                                const isPeerQuestioner = (peerUC?.role as ExtendedRole | undefined) === "QUESTIONER";
+                                                                let title = getUserName(peerId);
+                                                                if (isPeerPresenter) title += " (Präsentator)";
+                                                                if (isPeerQuestioner) title += " (Fragesteller)";
+                                                                return (
+                                                                    <VideoTile
+                                                                        key={peerId}
+                                                                        stream={stream}
+                                                                        title={title}
+                                                                        mirror={false}
+                                                                        mutedByDefault={false}
+                                                                        isLocal={false}
+                                                                        className="w-full h-full object-cover"
+                                                                    />
+                                                                );
+                                                            })}
                                                         </div>
                                                     ) : (
                                                         <div className="h-full grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
                                                             {hasLocal && (
                                                                 <VideoTile
                                                                     stream={localStream}
-                                                                    title={derivedRole === "ORGANIZER" ? "Du (Organizer)" : "Du"}
+                                                                    title={isCurrentUserPresenter ? "Du (Präsentator)" : (derivedRole === "ORGANIZER" ? "Du (Organizer)" : derivedRole === "QUESTIONER" ? "Du (Fragesteller)" : "Du")}
                                                                     mutedByDefault={true}
                                                                     mirror={true}
                                                                     isLocal={true}
                                                                     className="w-full aspect-video object-cover"
                                                                 />
                                                             )}
-                                                            {participantEntries.map(([peerId, stream]) => (
-                                                                <VideoTile
-                                                                    key={peerId}
-                                                                    stream={stream}
-                                                                    title={getUserName(peerId)}
-                                                                    mirror={false}
-                                                                    mutedByDefault={false}
-                                                                    isLocal={false}
-                                                                    className="w-full aspect-video object-cover"
-                                                                />
-                                                            ))}
+                                                            {participantEntries.map(([peerId, stream]) => {
+                                                                const peerUC = conference?.participants.find(p => p.userId === peerId);
+                                                                const isPeerPresenter = peerUC?.isPresenter ?? false;
+                                                                const isPeerQuestioner = (peerUC?.role as ExtendedRole | undefined) === "QUESTIONER";
+                                                                let title = getUserName(peerId);
+                                                                if (isPeerPresenter) title += " (Präsentator)";
+                                                                if (isPeerQuestioner) title += " (Fragesteller)";
+                                                                return (
+                                                                    <VideoTile
+                                                                        key={peerId}
+                                                                        stream={stream}
+                                                                        title={title}
+                                                                        mirror={false}
+                                                                        mutedByDefault={false}
+                                                                        isLocal={false}
+                                                                        className="w-full aspect-video object-cover"
+                                                                    />
+                                                                );
+                                                            })}
                                                         </div>
                                                     )}
                                                 </div>
                                             )}
 
                                             {/* Screenshare-Button wenn kein Screenshare aktiv */}
-                                            {!hasScreenShare && (derivedRole === "ORGANIZER" || derivedRole === "PARTICIPANT") && (
+                                            {!hasScreenShare && (derivedRole === "ORGANIZER" || derivedRole === "PARTICIPANT" || derivedRole === "QUESTIONER") && (
                                                 <div className="flex-shrink-0 flex justify-center">
                                                     <Button
                                                         onClick={startScreenShare}
@@ -824,27 +992,111 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                         {remainingSlots > 0 ? `Du kannst noch ${remainingSlots - selectedUserIds.length} von ${remainingSlots} möglichen hinzufügen.` : "Maximale Teilnehmeranzahl erreicht."}
                                     </h3>
 
+                                    {/* Aktueller Präsentator */}
+                                    {currentPresenter && (
+                                        <div className="pt-2">
+                                            <div className="mb-1 text-xs font-medium text-muted-foreground">Präsentator</div>
+                                            <div className="flex items-center gap-2">
+                                                <Badge variant="default" className="flex items-center gap-1">
+                                                    <Crown className="w-3 h-3" />
+                                                    <span>{currentPresenter.firstName} {currentPresenter.lastName ?? ""}</span>
+                                                </Badge>
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    onClick={() => handleSetPresenter(null)}
+                                                    className="h-6 text-xs"
+                                                >
+                                                    Entfernen
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {currentParticipants.length > 0 && (
                                         <div className="pt-2">
                                             <div className="mb-1 text-xs font-medium text-muted-foreground">Aktuelle Teilnehmer</div>
                                             <div className="flex flex-wrap gap-1">
-                                                {currentParticipants.map((u) => (
+                                                {currentParticipants.map((u) => {
+                                                    const uc = conference?.participants.find(p => p.userId === u.id);
+                                                    const role = uc?.role as ExtendedRole | undefined;
+                                                    const isQuestioner = role === "QUESTIONER";
+                                                    const isPresenter = uc?.isPresenter ?? false;
+                                                    return (
+                                                        <div key={u.id} className="flex items-center gap-1">
+                                                            <Badge 
+                                                                variant={isQuestioner ? "secondary" : isPresenter ? "default" : "outline"} 
+                                                                className="flex items-center gap-1 pr-1"
+                                                            >
+                                                                {isPresenter && <Crown className="w-3 h-3" />}
+                                                                {isQuestioner && <Mic className="w-3 h-3" />}
+                                                                <span>{u.firstName} {u.lastName ?? ""}</span>
+                                                                {isQuestioner && <span className="text-xs">(Fragesteller)</span>}
+                                                            </Badge>
+                                                            <div className="flex gap-0.5">
+                                                                {!isPresenter && (
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="ghost"
+                                                                        onClick={() => handleSetPresenter(u.id)}
+                                                                        className="h-6 px-1.5 text-xs"
+                                                                        title="Als Präsentator setzen"
+                                                                    >
+                                                                        <Crown className="w-3 h-3" />
+                                                                    </Button>
+                                                                )}
+                                                                {isQuestioner && (
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="ghost"
+                                                                        onClick={() => handleDeactivateQuestioner(u.id)}
+                                                                        className="h-6 px-1.5 text-xs"
+                                                                        title="Fragesteller deaktivieren"
+                                                                    >
+                                                                        <MicOff className="w-3 h-3" />
+                                                                    </Button>
+                                                                )}
+                                                                {!isPresenter && (
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            handleRemoveParticipant(u.id);
+                                                                        }}
+                                                                        className="hover:bg-destructive/20 rounded-full p-0.5 transition-colors"
+                                                                        title="Teilnehmer entfernen"
+                                                                    >
+                                                                        <X className="w-3 h-3" />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Zuschauer */}
+                                    {currentViewers.length > 0 && (
+                                        <div className="pt-2">
+                                            <div className="mb-1 text-xs font-medium text-muted-foreground">Zuschauer</div>
+                                            <div className="flex flex-wrap gap-1">
+                                                {currentViewers.map((u) => (
                                                     <Badge 
                                                         key={u.id} 
                                                         variant="outline" 
-                                                        className="flex items-center gap-1 pr-1"
+                                                        className="flex items-center gap-1"
                                                     >
                                                         <span>{u.firstName} {u.lastName ?? ""}</span>
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                handleRemoveParticipant(u.id);
-                                                            }}
-                                                            className="ml-1 hover:bg-destructive/20 rounded-full p-0.5 transition-colors"
-                                                            title="Teilnehmer entfernen"
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onClick={() => handleActivateQuestioner(u.id)}
+                                                            className="h-5 px-1.5 text-xs ml-1"
+                                                            title="Als Fragesteller aktivieren"
                                                         >
-                                                            <X className="w-3 h-3" />
-                                                        </button>
+                                                            <Mic className="w-3 h-3" />
+                                                        </Button>
                                                     </Badge>
                                                 ))}
                                             </div>

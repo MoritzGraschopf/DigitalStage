@@ -24,6 +24,7 @@ enum Role {
   ORGANIZER
   PARTICIPANT
   VIEWER
+  QUESTIONER
 }
 
 model User {
@@ -89,10 +90,12 @@ model UserConference {
   userId       String
   conferenceId String
   role         Role
+  isPresenter  Boolean  @default(false)
 
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   conference Conference @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
 
   @@id([userId, conferenceId])
   @@index([conferenceId])
+  @@index([conferenceId, isPresenter])
 }
