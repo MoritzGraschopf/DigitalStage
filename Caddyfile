@@ -23,7 +23,19 @@ digitalstage.liveroom.at {
     }
 
     # ==========================
-    # 3) Default → Next.js App
+    # 3) Hls: /hls/*
+    # ==========================
+    @hls {
+         path /hls/*
+    }
+
+    handle @hls {
+        root * /srv/hls
+        file_server
+    }
+
+    # ==========================
+    # 4) Default → Next.js App
     # ==========================
     handle {
         reverse_proxy app:3000

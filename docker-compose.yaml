@@ -3,29 +3,24 @@ services:
         image: digitalstage.liveroom.at/digitalstage-app:latest
         container_name: digitalstage_app
         restart: unless-stopped
-        env_file:
-            - .env
+        env_file: [ .env ]
         environment:
-            # DB-URL für Prisma / Next.js
             - DATABASE_URL=postgresql://digitalstage:digitalStage123@db:5432/digitalstage
-        expose:
-            - "3000"          # nur intern für Caddy sichtbar
-        depends_on:
-            - db
+        expose: [ "3000" ]
+        depends_on: [ db ]
         command: sh -c "npx prisma migrate deploy && npm start"
 
     websocket:
         image: digitalstage.liveroom.at/digitalstage-websocket:latest
         container_name: digitalstage_websocket
         restart: unless-stopped
-        env_file:
-            - .env
-        depends_on:
-            - db
+        env_file: [ .env ]
+        depends_on: [ db ]
         volumes:
             - ./certs:/app/certs:ro
+            - /opt/digitalstage/sdp:/sdp
         ports:
-            - "3010"
+            - "3010:3010"
             - "40000-40100:40000-40100"
         command: ["node", "ws-server.mjs"]
 
@@ -44,8 +39,7 @@ services:
         image: registry:2
         container_name: digitalstage_registry
         restart: unless-stopped
-        expose:
-            - "5000"          # nur intern, Caddy geht drauf
+        expose: [ "5000" ]
         volumes:
             - registry-data:/var/lib/registry
 
@@ -58,34 +52,34 @@ services:
             - "443:443"
         volumes:
             - ./Caddyfile:/etc/caddy/Caddyfile
+            - /opt/digitalstage/hls:/srv/hls:ro
             - caddy-data:/data
             - caddy-config:/config
-        depends_on:
-            - app
-            - registry
+        depends_on: [ app, registry ]
 
-    # Ausschnitt für den FFmpeg-Konverter-Service
     ffmpeg:
-        image: digitalstage.liveroom.at/digitalstage-ffmpeg:latest
+        image: jrottenberg/ffmpeg:6.1-alpine
         container_name: digitalstage_ffmpeg
         restart: unless-stopped
-        depends_on:
-            -   websocket
-        command: >
-            ffmpeg -protocol_whitelist file,udp,rtp -timeout 0 -i rtp://0.0.0.0:5004?listen=1 
-            -c:v libx264 -preset veryfast -crf 23 -c:a aac -b:a 128k 
-            -f hls -hls_time 4 -hls_list_size 5 -hls_flags delete_segments 
-            /mnt/hls_output/stream.m3u8
-        # Offenlegung des UDP-Ports (wichtig für die Kommunikation mit Mediasoup,
-        # falls sie nicht im gleichen internen Netzwerk sind, aber hier meist unnötig)
-        # ports:
-        #  - "5004:5004/udp"
         volumes:
-            - hls_data:/mnt/hls_output # Wird in Issue 3 definiert
+            - /opt/digitalstage/hls:/hls
+            - /opt/digitalstage/sdp:/sdp
+        command: >
+            -protocol_whitelist file,udp,rtp
+            -fflags +genpts
+            -i /sdp/input.sdp
+            -map 0:v:0 -c:v:0 libx264 -preset veryfast -tune zerolatency -g 50 -keyint_min 50 -sc_threshold 0
+            -f hls -hls_time 2 -hls_list_size 6 -hls_flags delete_segments+append_list+independent_segments
+            -hls_segment_filename /hls/testconf/cam/seg_%05d.ts /hls/testconf/cam/index.m3u8
+            -map 0:v:1 -c:v:1 libx264 -preset veryfast -tune zerolatency -g 50 -keyint_min 50 -sc_threshold 0
+            -f hls -hls_time 2 -hls_list_size 6 -hls_flags delete_segments+append_list+independent_segments
+            -hls_segment_filename /hls/testconf/screen/seg_%05d.ts /hls/testconf/screen/index.m3u8
+            -map 0:a:0 -c:a aac -b:a 128k
+            -f hls -hls_time 2 -hls_list_size 6 -hls_flags delete_segments+append_list
+            -hls_segment_filename /hls/testconf/audio/seg_%05d.ts /hls/testconf/audio/index.m3u8
 
 volumes:
     db-data:
     registry-data:
     caddy-data:
     caddy-config:
-    hls_data:
