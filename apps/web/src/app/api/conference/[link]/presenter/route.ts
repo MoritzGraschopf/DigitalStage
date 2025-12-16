@@ -49,6 +49,11 @@ export async function POST(
             return NextResponse.json({ message: "Viewers cannot be presenter" }, { status: 400 });
         }
 
+        // Fragesteller können nicht Präsentator werden
+        if (userConference.role === "QUESTIONER") {
+            return NextResponse.json({ message: "Questioners cannot be presenter" }, { status: 400 });
+        }
+
         // Prüfe maximale Anzahl von WebRTC-Teilnehmern, wenn ein externer Präsentator gesetzt wird
         const isExternalPresenter = userId !== conf.organizerId;
         if (isExternalPresenter) {

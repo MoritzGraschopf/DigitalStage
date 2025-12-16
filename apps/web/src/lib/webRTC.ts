@@ -483,8 +483,8 @@ export function useWebRTC(params: {
 
             const producer = await sendTransport.produce({
                 track,
-                // optional, falls du später unterscheiden willst (Server kann appData schon)
-                // appData: { mediaTag: "screen" },
+                // Markiere Screen-Sharing für serverseitige Validierung
+                appData: { mediaTag: "screen", source: "screen" },
             });
 
             screenProducerRef.current = producer;

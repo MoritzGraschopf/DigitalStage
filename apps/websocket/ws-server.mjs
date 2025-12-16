@@ -423,6 +423,13 @@ wss.on("connection", (ws) => {
                 const transport = peer?.transports.get(transportId);
                 if (!transport) throw new Error("transport not found");
 
+                if (peer?.role === "QUESTIONER") {
+                    // Screen-Sharing explizit blockieren (erkennbar an appData oder Track-Label)
+                    if (appData?.mediaTag === "screen" || appData?.source === "screen") {
+                        throw new Error("Questioners are not allowed to share their screen");
+                    }
+                }
+
                 const producer = await transport.produce({ kind, rtpParameters, appData });
                 peer.producers.set(producer.id, producer);
 
