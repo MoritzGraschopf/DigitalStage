@@ -847,7 +847,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                                     ) : null}
                                                     
                                                     {/* Screenshare-Controls */}
-                                                    {(derivedRole === "ORGANIZER" || derivedRole === "PARTICIPANT" || derivedRole === "QUESTIONER") && (
+                                                    {(derivedRole === "ORGANIZER" || derivedRole === "PARTICIPANT") && (
                                                         <div className="absolute top-4 right-4 z-30">
                                                             <Button
                                                                 onClick={isScreenSharing ? stopScreenShare : startScreenShare}
@@ -945,8 +945,8 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                                 </div>
                                             )}
 
-                                            {/* Screenshare-Button wenn kein Screenshare aktiv */}
-                                            {!hasScreenShare && (derivedRole === "ORGANIZER" || derivedRole === "PARTICIPANT" || derivedRole === "QUESTIONER") && (
+                                            {/* Screenshare-Button wenn kein Screenshare aktiv (nur für ORGANIZER und PARTICIPANT, nicht für QUESTIONER) */}
+                                            {!hasScreenShare && (derivedRole === "ORGANIZER" || derivedRole === "PARTICIPANT") && (
                                                 <div className="flex-shrink-0 flex justify-center">
                                                     <Button
                                                         onClick={startScreenShare}
