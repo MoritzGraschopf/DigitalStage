@@ -8,7 +8,6 @@ env:
   REGISTRY: digitalstage.liveroom.at
   APP_IMAGE: digitalstage.liveroom.at/digitalstage-app
   WS_IMAGE: digitalstage.liveroom.at/digitalstage-websocket
-  FFMPEG_IMAGE: digitalstage.liveroom.at/digitalstage-ffmpeg
 
 jobs:
   build-and-push:
@@ -38,18 +37,10 @@ jobs:
             -t $WS_IMAGE:latest \
             apps/websocket
 
-      - name: Build ffmpeg image
-        run: |
-          docker build \
-            -f docker/ffmpeg.Dockerfile \
-            -t $FFMPEG_IMAGE:latest \
-            .
-
       - name: Push images
         run: |
           docker push $APP_IMAGE:latest
           docker push $WS_IMAGE:latest
-          docker push $FFMPEG_IMAGE:latest
 
   deploy:
     name: Deploy to Debian Server
@@ -70,11 +61,10 @@ jobs:
           ssh server << 'EOF'
           set -e
           cd /opt/digitalstage
-          
-          # NEUE AKTION: Die neuesten Konfigurationsdateien abrufen
+
           echo ">>> Pulling latest configuration files via Git..."
           git pull
-          
+
           echo ">>> Rewriting .env from GitHub Secrets..."
           cat > .env << 'ENVEOF'
           DATABASE_URL=${{ secrets.DATABASE_URL }}
@@ -87,19 +77,19 @@ jobs:
           MEDIASOUP_LISTEN_IP=${{ secrets.MEDIASOUP_LISTEN_IP }}
           NODE_ENV=${{ secrets.NODE_ENV }}
           ENVEOF
-          
+
           chmod 600 .env
-          
-          echo ">>> Pulling latest images for app, websocket, db, ffmpeg..."
-          # Da die docker-compose.yaml jetzt aktuell ist, wird 'ffmpeg' erkannt.
-          docker compose -f docker-compose.yaml pull app websocket db ffmpeg
-          
-          echo ">>> Starting containers (app, websocket, db, ffmpeg)..."
-          docker compose -f docker-compose.yaml up -d app websocket db ffmpeg
-          
+
+          echo ">>> Pulling latest images (app, websocket, db, ffmpeg)..."
+          # ffmpeg wird von Docker Hub gezogen (jrottenberg/ffmpeg...), nicht aus eurer Registry
+          docker compose -f docker-compose.yaml pull
+
+          echo ">>> Starting containers..."
+          docker compose -f docker-compose.yaml up -d
+
           echo ">>> Cleaning old Docker images..."
           docker image prune -a -f
           docker builder prune -a -f
-          
+
           echo ">>> Done."
           EOF
