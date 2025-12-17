@@ -65,6 +65,8 @@ services:
             - /opt/digitalstage/hls:/hls
             - /opt/digitalstage/sdp:/sdp
         command: >
+            -analyzeduration 5M
+            -probesize 5M
             -protocol_whitelist file,udp,rtp
             -fflags +genpts
             -i /sdp/input.sdp
