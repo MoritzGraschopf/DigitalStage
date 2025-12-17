@@ -159,6 +159,7 @@ async function createPlainOut(router, { ip, port, rtcpPort }) {
         rtcpMux: false,
         comedia: false,
     });
+    // Verbinde den PlainTransport mit FFmpeg
     await transport.connect({ ip, port, rtcpPort });
     return transport;
 }
@@ -202,22 +203,55 @@ async function attachProducerToHls(conferenceId, router, producer, tag, userId) 
 
     // schon belegt? (bei 1 conference test: überschreiben/neu setzen)
     if (ingest.consumers[tag]) {
-        try { ingest.consumers[tag].close(); } catch {}
+        try {
+            const oldConsumer = ingest.consumers[tag];
+            if (oldConsumer?.consumer) oldConsumer.consumer.close();
+            if (oldConsumer?.tempTransport) oldConsumer.tempTransport.close();
+            if (oldConsumer?.plainProducer) oldConsumer.plainProducer.close();
+        } catch {}
         ingest.consumers[tag] = null;
     }
 
     const plainTransport = ingest.transports[tag];
 
-    const consumer = await plainTransport.consume({
+    // Um einen Consumer zu erstellen, brauchen wir einen Transport
+    // Wir erstellen einen temporären WebRTC-Transport für den Consumer
+    const tempTransport = await router.createWebRtcTransport({
+        listenIps: [{ ip: "127.0.0.1", announcedIp: null }],
+        enableUdp: false,
+        enableTcp: true,
+    });
+
+    // Consumer vom Router erstellen (über den temporären Transport)
+    // Dieser Consumer empfängt die Pakete vom Producer
+    const consumer = await tempTransport.consume({
         producerId: producer.id,
         rtpCapabilities: router.rtpCapabilities,
         paused: false,
     });
 
-    ingest.consumers[tag] = consumer;
+    // Die RTP-Parameter des Consumers verwenden, um einen Producer auf dem PlainTransport zu erstellen
+    // Der PlainTransport sendet die Pakete dann an FFmpeg
+    // WICHTIG: Die RTP-Parameter müssen angepasst werden, um die richtige IP/Port zu verwenden
+    const rtpParameters = JSON.parse(JSON.stringify(consumer.rtpParameters));
+    
+    // Die IP-Adresse und Ports müssen auf die PlainTransport-Verbindung zeigen
+    // Die PlainTransport-Verbindung wurde bereits mit connect() konfiguriert
+    const plainProducer = await plainTransport.produce({
+        kind: consumer.kind,
+        rtpParameters: rtpParameters,
+    });
 
-    consumer.on("transportclose", () => { ingest.consumers[tag] = null; });
-    consumer.on("producerclose", () => { ingest.consumers[tag] = null; });
+    // Consumer, temporären Transport und PlainProducer behalten
+    // Der Consumer empfängt Pakete vom Producer und leitet sie über den PlainProducer an FFmpeg weiter
+    ingest.consumers[tag] = { consumer, plainProducer, tempTransport };
+
+    consumer.on("transportclose", () => {
+        if (ingest.consumers[tag]) ingest.consumers[tag] = null;
+    });
+    producer.on("transportclose", () => {
+        if (ingest.consumers[tag]) ingest.consumers[tag] = null;
+    });
 
     // Audio-Owner merken (optional)
     if (tag === "audio") ingest.activeAudioUserId = userId;
