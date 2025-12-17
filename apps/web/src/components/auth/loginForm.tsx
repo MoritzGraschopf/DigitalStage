@@ -35,14 +35,9 @@ export default function LoginForm() {
 
     // 2. Define a submit handler.
     async function onSubmit(values: z.infer<typeof loginSchema>) {
-        // Do something with the form values.
-        // ✅ This will be type-safe and validated.
-        console.log(values)
-
         await login(values.email, values.password, redirect)
             .catch(error => {
                 console.log(error)
-
                 if (error.message === "Login fehlgeschlagen") {
                     form.setError("email", { message: "Ungültige E-Mail oder Passwort" });
                 } else {
