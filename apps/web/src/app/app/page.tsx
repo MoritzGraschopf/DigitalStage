@@ -56,7 +56,7 @@ export default function Home() {
 
     const handleCopy = async (link: string, id: string) => {
         try {
-            await navigator.clipboard.writeText("http://localhost:3000/app/" + link);
+            await navigator.clipboard.writeText("https://digitalstage.liveroom.at:3000/app/" + link);
             setCopiedLinkId(id);
             setTimeout(() => setCopiedLinkId(null), 2000); // Reset nach 2 Sekunden
         } catch (err) {

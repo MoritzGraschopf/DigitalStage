@@ -23,7 +23,24 @@ digitalstage.liveroom.at {
     }
 
     # ==========================
-    # 3) Default → Next.js App
+    # 3) HLS Streams: /hls/*
+    # ==========================
+    @hls {
+        path /hls/*
+    }
+    handle @hls {
+        file_server {
+            root /hls
+        }
+        header {
+            Access-Control-Allow-Origin *
+            Access-Control-Allow-Methods "GET, OPTIONS"
+            Cache-Control "no-cache, no-store, must-revalidate"
+        }
+    }
+
+    # ==========================
+    # 4) Default → Next.js App
     # ==========================
     handle {
         reverse_proxy app:3000

@@ -24,6 +24,8 @@ services:
             - db
         volumes:
             - ./certs:/app/certs:ro
+            - /opt/digitalstage/hls:/hls
+            - /opt/digitalstage/sdp:/sdp
         ports:
             - "3010"
             - "40000-40100:40000-40100"
@@ -60,11 +62,15 @@ services:
             - ./Caddyfile:/etc/caddy/Caddyfile
             - caddy-data:/data
             - caddy-config:/config
+            - /opt/digitalstage/hls:/hls
         depends_on:
             - app
             - registry
 
     # Ausschnitt für den FFmpeg-Konverter-Service
+    # HINWEIS: Der FFmpeg-Befehl muss möglicherweise angepasst werden, um mehrere Streams
+    # (cam, screen, audio) gleichzeitig zu verarbeiten. Aktuell wird die SDP-Datei mit allen
+    # drei Streams gelesen, aber der Output-Befehl muss entsprechend konfiguriert werden.
     ffmpeg:
         image: digitalstage.liveroom.at/digitalstage-ffmpeg:latest
         container_name: digitalstage_ffmpeg
@@ -72,16 +78,20 @@ services:
         depends_on:
             -   websocket
         command: >
-            ffmpeg -protocol_whitelist file,udp,rtp -timeout 0 -i rtp://0.0.0.0:5004?listen=1 
+            ffmpeg -protocol_whitelist file,udp,rtp -timeout 0 -i /sdp/input.sdp 
             -c:v libx264 -preset veryfast -crf 23 -c:a aac -b:a 128k 
             -f hls -hls_time 4 -hls_list_size 5 -hls_flags delete_segments 
-            /mnt/hls_output/stream.m3u8
+            -hls_segment_filename /hls/%v/seg_%05d.ts 
+            -master_pl_name /hls/master.m3u8 
+            -var_stream_map "v:0 v:1 a:0" 
+            /hls/%v/index.m3u8
         # Offenlegung des UDP-Ports (wichtig für die Kommunikation mit Mediasoup,
         # falls sie nicht im gleichen internen Netzwerk sind, aber hier meist unnötig)
         # ports:
         #  - "5004:5004/udp"
         volumes:
-            - hls_data:/mnt/hls_output # Wird in Issue 3 definiert
+            - /opt/digitalstage/hls:/hls
+            - /opt/digitalstage/sdp:/sdp
 
 volumes:
     db-data:

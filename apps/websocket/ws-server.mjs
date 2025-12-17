@@ -1,5 +1,7 @@
 import { WebSocketServer } from "ws";
 import http from "http";
+import fs from "fs";
+import path from "path";
 
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
@@ -12,6 +14,9 @@ const inConference = new Map();
 const notInConference = new Map();
 
 const rtcRooms = new Map();
+
+// HLS Ingest State pro Conference
+const hlsIngest = new Map(); // conferenceId -> { transports, consumers, activeAudioUserId }
 
 const WS = { OPEN: 1 };
 function now() { return Date.now(); }
@@ -112,6 +117,96 @@ function respond(ws, requestId, data = null) { // ✅ NEW
 }
 function respondError(ws, requestId, error) { // ✅ NEW
     safeSend(ws, { type: "sfu:response", responseId: requestId, ok: false, error: String(error || "error") });
+}
+
+// =========================
+// HLS Helper Functions
+// =========================
+
+async function ensureDir(p) {
+    await fs.promises.mkdir(p, { recursive: true });
+}
+
+function writeSdp(filePath) {
+    const sdp = `v=0
+o=- 0 0 IN IP4 0.0.0.0
+s=DigitalStage
+c=IN IP4 0.0.0.0
+t=0 0
+
+m=video 5004 RTP/AVP 96
+a=rtpmap:96 VP8/90000
+a=recvonly
+
+m=video 5006 RTP/AVP 97
+a=rtpmap:97 VP8/90000
+a=recvonly
+
+m=audio 5008 RTP/AVP 111
+a=rtpmap:111 OPUS/48000/2
+a=recvonly
+`;
+    fs.writeFileSync(filePath, sdp);
+}
+
+async function createPlainOut(router, { ip, port, rtcpPort }) {
+    const transport = await router.createPlainTransport({
+        listenIp: { ip: "0.0.0.0", announcedIp: null },
+        rtcpMux: false,
+        comedia: false,
+    });
+    await transport.connect({ ip, port, rtcpPort });
+    return transport;
+}
+
+async function startHlsForConference(conferenceId, router) {
+    if (hlsIngest.has(conferenceId)) return hlsIngest.get(conferenceId);
+
+    // Ordner (server-bind mount) müssen existieren, sonst failt ffmpeg beim Schreiben
+    await ensureDir(`/hls/${conferenceId}/cam`);
+    await ensureDir(`/hls/${conferenceId}/screen`);
+    await ensureDir(`/hls/${conferenceId}/audio`);
+
+    // SDP schreiben (wichtig: der ffmpeg container liest /sdp/input.sdp)
+    writeSdp(`/sdp/input.sdp`);
+
+    const targetIp = "ffmpeg"; // <<<<<< wichtig im docker network
+
+    const transports = {
+        cam: await createPlainOut(router, { ip: targetIp, port: 5004, rtcpPort: 5005 }),
+        screen: await createPlainOut(router, { ip: targetIp, port: 5006, rtcpPort: 5007 }),
+        audio: await createPlainOut(router, { ip: targetIp, port: 5008, rtcpPort: 5009 }),
+    };
+
+    const state = { transports, consumers: { cam: null, screen: null, audio: null }, activeAudioUserId: null };
+    hlsIngest.set(conferenceId, state);
+    return state;
+}
+
+async function attachProducerToHls(conferenceId, router, producer, tag, userId) {
+    const ingest = await startHlsForConference(conferenceId, router);
+
+    // schon belegt? (bei 1 conference test: überschreiben/neu setzen)
+    if (ingest.consumers[tag]) {
+        try { ingest.consumers[tag].close(); } catch {}
+        ingest.consumers[tag] = null;
+    }
+
+    const plainTransport = ingest.transports[tag];
+
+    const consumer = await plainTransport.consume({
+        producerId: producer.id,
+        rtpCapabilities: router.rtpCapabilities,
+        paused: false,
+    });
+
+    ingest.consumers[tag] = consumer;
+
+    consumer.on("transportclose", () => { ingest.consumers[tag] = null; });
+    consumer.on("producerclose", () => { ingest.consumers[tag] = null; });
+
+    // Audio-Owner merken (optional)
+    if (tag === "audio") ingest.activeAudioUserId = userId;
 }
 
 // ✅ CHANGED: Transport helper (ANNOUNCED_IP matcht .env)
@@ -434,6 +529,20 @@ wss.on("connection", (ws) => {
                 peer.producers.set(producer.id, producer);
 
                 producer.on("transportclose", () => peer.producers.delete(producer.id));
+
+                // HLS mapping: Producers automatisch an FFmpeg anbinden
+                const mediaTag = appData?.mediaTag; // "cam" | "screen" | undefined
+                if (producer.kind === "video") {
+                    if (mediaTag === "screen") {
+                        await attachProducerToHls(conferenceId, room.router, producer, "screen", userId);
+                    } else {
+                        // default: cam
+                        await attachProducerToHls(conferenceId, room.router, producer, "cam", userId);
+                    }
+                } else if (producer.kind === "audio") {
+                    // Fürs Erste: nur eine Audioquelle aktiv (Presenter ODER Questioner)
+                    await attachProducerToHls(conferenceId, room.router, producer, "audio", userId);
+                }
 
                 respond(ws, requestId, { id: producer.id }); // ✅ CHANGED
 
