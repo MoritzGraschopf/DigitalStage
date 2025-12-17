@@ -131,7 +131,14 @@ async function ensureDir(p) {
     await fs.promises.mkdir(p, { recursive: true });
 }
 
-function writeSdp(filePath) {
+function writeSdp(filePath, videoSizes = { cam: null, screen: null }) {
+    // Standard-Video-Größe, falls nicht angegeben (1280x720)
+    const camSize = videoSizes.cam || "1280x720";
+    const screenSize = videoSizes.screen || "1920x1080";
+    
+    const [camWidth, camHeight] = camSize.split("x");
+    const [screenWidth, screenHeight] = screenSize.split("x");
+    
     const sdp = `v=0
 o=- 0 0 IN IP4 0.0.0.0
 s=DigitalStage
@@ -140,10 +147,16 @@ t=0 0
 
 m=video 5004 RTP/AVP 96
 a=rtpmap:96 VP8/90000
+a=fmtp:96 max-fr=30;max-fs=3600
+a=framerate:30
+a=video_size:${camWidth}x${camHeight}
 a=recvonly
 
 m=video 5006 RTP/AVP 97
 a=rtpmap:97 VP8/90000
+a=fmtp:97 max-fr=30;max-fs=3600
+a=framerate:30
+a=video_size:${screenWidth}x${screenHeight}
 a=recvonly
 
 m=audio 5008 RTP/AVP 111
@@ -173,6 +186,7 @@ async function startHlsForConference(conferenceId, router) {
     await ensureDir(`/hls/${conferenceId}/audio`);
 
     // SDP schreiben (wichtig: der ffmpeg container liest /sdp/input.sdp)
+    // Initial mit Standard-Größen, wird später aktualisiert wenn Producer hinzugefügt werden
     writeSdp(`/sdp/input.sdp`);
 
     // DNS-Lookup für FFmpeg-Container (mit Fallback)
@@ -226,7 +240,8 @@ async function startHlsForConference(conferenceId, router) {
         ffmpegPipeTransport,
         transports, 
         consumers: { cam: null, screen: null, audio: null }, 
-        activeAudioUserId: null 
+        activeAudioUserId: null,
+        videoSizes: { cam: null, screen: null }
     };
     hlsIngest.set(conferenceId, state);
     return state;
@@ -269,6 +284,26 @@ async function attachProducerToHls(conferenceId, router, producer, tag, userId) 
         rtpCapabilities: router.rtpCapabilities,
         paused: false,
     });
+
+    // Video-Größe aus RTP-Parametern extrahieren (falls vorhanden)
+    if (consumer.kind === "video" && consumer.rtpParameters.encodings?.[0]) {
+        const encoding = consumer.rtpParameters.encodings[0];
+        // Versuche Video-Größe aus encoding zu extrahieren oder verwende Standard
+        let videoSize = null;
+        if (encoding.scaleResolutionDownBy) {
+            // Wenn scaleResolutionDownBy vorhanden, können wir die ursprüngliche Größe schätzen
+            // Standard: 1280x720 für cam, 1920x1080 für screen
+            videoSize = tag === "screen" ? "1920x1080" : "1280x720";
+        } else {
+            videoSize = tag === "screen" ? "1920x1080" : "1280x720";
+        }
+        
+        // SDP-File mit Video-Größe aktualisieren
+        const currentSizes = ingest.videoSizes || { cam: null, screen: null };
+        currentSizes[tag] = videoSize;
+        ingest.videoSizes = currentSizes;
+        writeSdp(`/sdp/input.sdp`, currentSizes);
+    }
 
     // Producer auf dem PipeTransport erstellen (leitet Pakete zum FFmpeg-Router weiter)
     const pipeProducer = await pipeTransport.produce({
