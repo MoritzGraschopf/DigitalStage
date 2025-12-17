@@ -275,6 +275,175 @@ function VideoTile({
     );
 }
 
+// HLS Viewer Component für Viewer-Rolle
+function HLSViewer({ 
+    conferenceId, 
+    currentPresenter 
+}: { 
+    conferenceId: string; 
+    currentPresenter: User | null;
+}) {
+    const [hasHls, setHasHls] = useState(false);
+    const camVideoRef = useRef<HTMLVideoElement>(null);
+    const screenVideoRef = useRef<HTMLVideoElement>(null);
+    const audioRef = useRef<HTMLAudioElement>(null);
+    const ws = useWS();
+
+    // HLS-URLs konstruieren
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+    const camUrl = `${baseUrl}/hls/${conferenceId}/cam/index.m3u8`;
+    const screenUrl = `${baseUrl}/hls/${conferenceId}/screen/index.m3u8`;
+    const audioUrl = `${baseUrl}/hls/${conferenceId}/audio/index.m3u8`;
+
+    // WebSocket Event: server:use-hls (optional, für sofortige Benachrichtigung)
+    useEffect(() => {
+        const off = ws.on("server:use-hls", (msg: unknown) => {
+            const m = msg as { conferenceId?: string };
+            if (m?.conferenceId === conferenceId) {
+                console.log("✅ HLS verfügbar für Konferenz", conferenceId);
+                setHasHls(true);
+            }
+        });
+        return off;
+    }, [ws, conferenceId]);
+
+    // Automatisch HLS aktivieren wenn Viewer (nicht auf Event warten)
+    useEffect(() => {
+        // Kurze Verzögerung, damit die Konferenz geladen ist
+        const timer = setTimeout(() => {
+            setHasHls(true);
+        }, 1000);
+        return () => clearTimeout(timer);
+    }, [conferenceId]);
+
+    // HLS-Streams laden wenn verfügbar
+    useEffect(() => {
+        if (!hasHls) return;
+
+        const loadHls = async () => {
+            // Prüfe ob HLS.js verfügbar ist (für Browser ohne native HLS-Unterstützung)
+            let Hls: any = null;
+            if (typeof window !== 'undefined') {
+                try {
+                    // Versuche HLS.js dynamisch zu laden (optional)
+                    const hlsModule = await import('hls.js');
+                    Hls = hlsModule.default;
+                } catch (e) {
+                    console.log("HLS.js nicht verfügbar, verwende native HLS-Unterstützung");
+                }
+            }
+
+            // Helper-Funktion zum Laden eines HLS-Streams
+            const loadStream = (element: HTMLVideoElement | HTMLAudioElement, url: string) => {
+                if (!element) return;
+
+                if (Hls && Hls.isSupported()) {
+                    // HLS.js für Chrome/Firefox/etc.
+                    const hls = new Hls({ 
+                        enableWorker: false,
+                        lowLatencyMode: true,
+                    });
+                    hls.loadSource(url);
+                    hls.attachMedia(element);
+                    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                        element.play().catch((e) => console.warn("Autoplay blocked:", e));
+                    });
+                    hls.on(Hls.Events.ERROR, (event: any, data: any) => {
+                        if (data.fatal) {
+                            console.error("HLS fatal error:", data);
+                        }
+                    });
+                } else if (element.canPlayType('application/vnd.apple.mpegurl')) {
+                    // Native HLS-Unterstützung (Safari, iOS)
+                    element.src = url;
+                    element.play().catch((e) => console.warn("Autoplay blocked:", e));
+                } else {
+                    console.warn("HLS wird nicht unterstützt in diesem Browser");
+                }
+            };
+
+            // Streams laden
+            if (camVideoRef.current) {
+                loadStream(camVideoRef.current, camUrl);
+            }
+            if (screenVideoRef.current) {
+                loadStream(screenVideoRef.current, screenUrl);
+            }
+            if (audioRef.current) {
+                loadStream(audioRef.current, audioUrl);
+            }
+        };
+
+        loadHls();
+    }, [hasHls, camUrl, screenUrl, audioUrl]);
+
+    if (!hasHls) {
+        return (
+            <div className="h-full flex flex-col items-center justify-center text-muted-foreground p-8">
+                <div className="text-center mb-6">
+                    <div className="text-6xl mb-4">👁️</div>
+                    <div className="text-xl font-medium mb-2">Du bist <b>Zuschauer</b></div>
+                    <div className="text-sm">Warte auf Stream...</div>
+                </div>
+                {currentPresenter && (
+                    <div className="text-center">
+                        <div className="text-sm text-muted-foreground mb-1">Aktueller Präsentator:</div>
+                        <Badge variant="default" className="flex items-center gap-1 w-fit mx-auto">
+                            <Crown className="w-3 h-3" />
+                            {currentPresenter.firstName} {currentPresenter.lastName ?? ""}
+                        </Badge>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    return (
+        <div className="h-full flex flex-col p-2 sm:p-3 md:p-4 gap-3 sm:gap-4">
+            {/* Präsentator-Info */}
+            {currentPresenter && (
+                <div className="flex-shrink-0 flex items-center justify-center gap-2 p-2 bg-muted/30 rounded-lg mb-2">
+                    <Crown className="w-4 h-4 text-yellow-500" />
+                    <span className="text-sm font-medium">
+                        Präsentator: {currentPresenter.firstName} {currentPresenter.lastName ?? ""}
+                    </span>
+                </div>
+            )}
+
+            {/* Screen-Share groß (wenn verfügbar) */}
+            <div className="flex-1 min-h-0 relative rounded-xl overflow-hidden bg-black">
+                <video
+                    ref={screenVideoRef}
+                    autoPlay
+                    playsInline
+                    muted={false}
+                    className="w-full h-full object-contain"
+                />
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent px-4 py-3">
+                    <span className="text-sm font-semibold text-white">Bildschirm-Freigabe</span>
+                </div>
+
+                {/* Kamera-Stream als Overlay unten rechts */}
+                <div className="absolute bottom-4 right-4 w-48 sm:w-56 md:w-64 h-32 sm:h-40 rounded-xl overflow-hidden bg-gradient-to-br from-background to-muted/30 border-2 border-background shadow-2xl">
+                    <video
+                        ref={camVideoRef}
+                        autoPlay
+                        playsInline
+                        muted={false}
+                        className="w-full h-full object-cover"
+                    />
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent px-2 py-2">
+                        <span className="text-xs font-semibold text-white">Kamera</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Audio-Stream (unsichtbar) */}
+            <audio ref={audioRef} autoPlay playsInline />
+        </div>
+    );
+}
+
 export default function Page({ params }: { params: Promise<{ link: string }> }) {
     const { link } = use(params);
 
@@ -737,22 +906,10 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                 ) : (
                     <>
                         {derivedRole === "VIEWER" ? (
-                            <div className="h-full flex flex-col items-center justify-center text-muted-foreground p-8">
-                                <div className="text-center mb-6">
-                                    <div className="text-6xl mb-4">👁️</div>
-                                    <div className="text-xl font-medium mb-2">Du bist <b>Zuschauer</b></div>
-                                    <div className="text-sm">Hier kommt der HLS-Player hin</div>
-                                </div>
-                                {currentPresenter && (
-                                    <div className="text-center">
-                                        <div className="text-sm text-muted-foreground mb-1">Aktueller Präsentator:</div>
-                                        <Badge variant="default" className="flex items-center gap-1 w-fit mx-auto">
-                                            <Crown className="w-3 h-3" />
-                                            {currentPresenter.firstName} {currentPresenter.lastName ?? ""}
-                                        </Badge>
-                                    </div>
-                                )}
-                            </div>
+                            <HLSViewer 
+                                conferenceId={conference.id} 
+                                currentPresenter={currentPresenter}
+                            />
                         ) : (
                             <div className="h-full relative flex flex-col p-2 sm:p-3 md:p-4 gap-3 sm:gap-4">
                                 {(() => {
