@@ -635,14 +635,14 @@ wss.on("connection", (ws) => {
                 const mediaTag = appData?.mediaTag; // "cam" | "screen" | undefined
                 if (producer.kind === "video") {
                     if (mediaTag === "screen") {
-                        await attachProducerToHls(conferenceId, room.router, producer, "screen", userId);
+                        await attachProducerToHls(conferenceId, room.router, producer, "screen", userId).catch(err => console.error("HLS Screen attach failed:", err));
                     } else {
                         // default: cam
-                        await attachProducerToHls(conferenceId, room.router, producer, "cam", userId);
+                        await attachProducerToHls(conferenceId, room.router, producer, "cam", userId).catch(err => console.error("HLS Cam attach failed:", err));
                     }
                 } else if (producer.kind === "audio") {
                     // Fürs Erste: nur eine Audioquelle aktiv (Presenter ODER Questioner)
-                    await attachProducerToHls(conferenceId, room.router, producer, "audio", userId);
+                    await attachProducerToHls(conferenceId, room.router, producer, "audio", userId).catch(err => console.error("HLS Audio attach failed:", err));
                 }
 
                 respond(ws, requestId, { id: producer.id }); // ✅ CHANGED
