@@ -610,7 +610,10 @@ export function useWebRTC(params: {
 
                     try {
                         if (vTrack && device.canProduce("video")) {
-                            await sendTransport.produce({ track: vTrack });
+                            await sendTransport.produce({ 
+                                track: vTrack,
+                                appData: { mediaTag: "cam" }
+                            });
                         }
                         if (aTrack && device.canProduce("audio")) {
                             await sendTransport.produce({ track: aTrack });
