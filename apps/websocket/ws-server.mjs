@@ -187,13 +187,47 @@ async function startHlsForConference(conferenceId, router) {
         targetIp = process.env.FFMPEG_IP || "127.0.0.1";
     }
 
+    // Separaten Router für FFmpeg erstellen (für PipeTransport)
+    const ffmpegRouter = await worker.createRouter({ mediaCodecs });
+
+    // PipeTransport auf dem Haupt-Router erstellen
+    const pipeTransport = await router.createPipeTransport({
+        listenIp: { ip: "127.0.0.1", announcedIp: null },
+        enableSctp: false,
+    });
+
+    // PipeTransport auf dem FFmpeg-Router erstellen
+    const ffmpegPipeTransport = await ffmpegRouter.createPipeTransport({
+        listenIp: { ip: "127.0.0.1", announcedIp: null },
+        enableSctp: false,
+    });
+
+    // Die beiden PipeTransports verbinden
+    await pipeTransport.connect({
+        ip: ffmpegPipeTransport.tuple.localIp,
+        port: ffmpegPipeTransport.tuple.localPort,
+    });
+
+    await ffmpegPipeTransport.connect({
+        ip: pipeTransport.tuple.localIp,
+        port: pipeTransport.tuple.localPort,
+    });
+
+    // PlainTransports auf dem FFmpeg-Router erstellen
     const transports = {
-        cam: await createPlainOut(router, { ip: targetIp, port: 5004, rtcpPort: 5005 }),
-        screen: await createPlainOut(router, { ip: targetIp, port: 5006, rtcpPort: 5007 }),
-        audio: await createPlainOut(router, { ip: targetIp, port: 5008, rtcpPort: 5009 }),
+        cam: await createPlainOut(ffmpegRouter, { ip: targetIp, port: 5004, rtcpPort: 5005 }),
+        screen: await createPlainOut(ffmpegRouter, { ip: targetIp, port: 5006, rtcpPort: 5007 }),
+        audio: await createPlainOut(ffmpegRouter, { ip: targetIp, port: 5008, rtcpPort: 5009 }),
     };
 
-    const state = { transports, consumers: { cam: null, screen: null, audio: null }, activeAudioUserId: null };
+    const state = { 
+        router: ffmpegRouter,
+        pipeTransport,
+        ffmpegPipeTransport,
+        transports, 
+        consumers: { cam: null, screen: null, audio: null }, 
+        activeAudioUserId: null 
+    };
     hlsIngest.set(conferenceId, state);
     return state;
 }
@@ -207,12 +241,18 @@ async function attachProducerToHls(conferenceId, router, producer, tag, userId) 
             const oldConsumer = ingest.consumers[tag];
             if (oldConsumer?.consumer) oldConsumer.consumer.close();
             if (oldConsumer?.tempTransport) oldConsumer.tempTransport.close();
+            if (oldConsumer?.pipeProducer) oldConsumer.pipeProducer.close();
+            if (oldConsumer?.pipeConsumer) oldConsumer.pipeConsumer.close();
             if (oldConsumer?.plainProducer) oldConsumer.plainProducer.close();
+            if (oldConsumer?.ffmpegTempTransport) oldConsumer.ffmpegTempTransport.close();
         } catch {}
         ingest.consumers[tag] = null;
     }
 
     const plainTransport = ingest.transports[tag];
+    const pipeTransport = ingest.pipeTransport;
+    const ffmpegPipeTransport = ingest.ffmpegPipeTransport;
+    const ffmpegRouter = ingest.router;
 
     // Um einen Consumer zu erstellen, brauchen wir einen Transport
     // Wir erstellen einen temporären WebRTC-Transport für den Consumer
@@ -230,21 +270,34 @@ async function attachProducerToHls(conferenceId, router, producer, tag, userId) 
         paused: false,
     });
 
-    // Die RTP-Parameter des Consumers verwenden, um einen Producer auf dem PlainTransport zu erstellen
-    // Der PlainTransport sendet die Pakete dann an FFmpeg
-    // WICHTIG: Die RTP-Parameter müssen angepasst werden, um die richtige IP/Port zu verwenden
-    const rtpParameters = JSON.parse(JSON.stringify(consumer.rtpParameters));
-    
-    // Die IP-Adresse und Ports müssen auf die PlainTransport-Verbindung zeigen
-    // Die PlainTransport-Verbindung wurde bereits mit connect() konfiguriert
-    const plainProducer = await plainTransport.produce({
+    // Producer auf dem PipeTransport erstellen (leitet Pakete zum FFmpeg-Router weiter)
+    const pipeProducer = await pipeTransport.produce({
         kind: consumer.kind,
-        rtpParameters: rtpParameters,
+        rtpParameters: consumer.rtpParameters,
     });
 
-    // Consumer, temporären Transport und PlainProducer behalten
-    // Der Consumer empfängt Pakete vom Producer und leitet sie über den PlainProducer an FFmpeg weiter
-    ingest.consumers[tag] = { consumer, plainProducer, tempTransport };
+    // Consumer auf dem FFmpeg-Router erstellen (empfängt Pakete vom PipeProducer)
+    // Wir brauchen einen Transport auf dem FFmpeg-Router für den Consumer
+    const ffmpegTempTransport = await ffmpegRouter.createWebRtcTransport({
+        listenIps: [{ ip: "127.0.0.1", announcedIp: null }],
+        enableUdp: false,
+        enableTcp: true,
+    });
+
+    const pipeConsumer = await ffmpegTempTransport.consume({
+        producerId: pipeProducer.id,
+        rtpCapabilities: ffmpegRouter.rtpCapabilities,
+        paused: false,
+    });
+
+    // Producer auf dem PlainTransport erstellen (sendet Pakete an FFmpeg)
+    const plainProducer = await plainTransport.produce({
+        kind: pipeConsumer.kind,
+        rtpParameters: pipeConsumer.rtpParameters,
+    });
+
+    // Alle Objekte behalten
+    ingest.consumers[tag] = { consumer, pipeProducer, pipeConsumer, plainProducer, tempTransport, ffmpegTempTransport };
 
     consumer.on("transportclose", () => {
         if (ingest.consumers[tag]) ingest.consumers[tag] = null;
