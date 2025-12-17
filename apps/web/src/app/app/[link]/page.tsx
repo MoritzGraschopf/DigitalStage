@@ -15,6 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Check, Copy, Info, LoaderCircle, MessageCircle, X, Monitor, MonitorOff, Crown, Mic, MicOff } from "lucide-react";
 import ConferenceChat from "@/components/ConferenceChat";
+import type HlsType from "hls.js";
 
 type ConferenceWithParticipants = Conference & { 
     participants: Array<UserConference & { isPresenter?: boolean }> 
@@ -322,13 +323,13 @@ function HLSViewer({
 
         const loadHls = async () => {
             // Prüfe ob HLS.js verfügbar ist (für Browser ohne native HLS-Unterstützung)
-            let Hls: any = null;
+            let HlsClass: typeof HlsType | null = null;
             if (typeof window !== 'undefined') {
                 try {
                     // Versuche HLS.js dynamisch zu laden (optional)
                     const hlsModule = await import('hls.js');
-                    Hls = hlsModule.default;
-                } catch (e) {
+                    HlsClass = hlsModule.default;
+                } catch {
                     console.log("HLS.js nicht verfügbar, verwende native HLS-Unterstützung");
                 }
             }
@@ -337,18 +338,18 @@ function HLSViewer({
             const loadStream = (element: HTMLVideoElement | HTMLAudioElement, url: string) => {
                 if (!element) return;
 
-                if (Hls && Hls.isSupported()) {
+                if (HlsClass && HlsClass.isSupported()) {
                     // HLS.js für Chrome/Firefox/etc.
-                    const hls = new Hls({ 
+                    const hls = new HlsClass({ 
                         enableWorker: false,
                         lowLatencyMode: true,
                     });
                     hls.loadSource(url);
                     hls.attachMedia(element);
-                    hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                        element.play().catch((e) => console.warn("Autoplay blocked:", e));
+                    hls.on(HlsClass.Events.MANIFEST_PARSED, () => {
+                        element.play().catch((err) => console.warn("Autoplay blocked:", err));
                     });
-                    hls.on(Hls.Events.ERROR, (event: any, data: any) => {
+                    hls.on(HlsClass.Events.ERROR, (_event, data) => {
                         if (data.fatal) {
                             console.error("HLS fatal error:", data);
                         }
@@ -356,7 +357,7 @@ function HLSViewer({
                 } else if (element.canPlayType('application/vnd.apple.mpegurl')) {
                     // Native HLS-Unterstützung (Safari, iOS)
                     element.src = url;
-                    element.play().catch((e) => console.warn("Autoplay blocked:", e));
+                    element.play().catch((err) => console.warn("Autoplay blocked:", err));
                 } else {
                     console.warn("HLS wird nicht unterstützt in diesem Browser");
                 }
@@ -546,7 +547,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
     const derivedRole: ExtendedRole = useMemo(() => {
         if (!conference || !user?.id) return "VIEWER";
         if (conference.organizerId === user.id) return "ORGANIZER";
-        const uc = conference.participants.find(p => p.userId === user.id);
+        const uc = conference.participants.find((p: UserConference & { isPresenter?: boolean }) => p.userId === user.id);
         if (!uc) return "VIEWER";
         return uc.role as ExtendedRole;
     }, [conference, user?.id]);
