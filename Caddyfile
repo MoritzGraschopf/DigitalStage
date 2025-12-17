@@ -23,20 +23,15 @@ digitalstage.liveroom.at {
     }
 
     # ==========================
-    # 3) HLS Streams: /hls/*
+    # 3) Hls: /hls/*
     # ==========================
     @hls {
-        path /hls/*
+         path /hls/*
     }
+
     handle @hls {
-        file_server {
-            root /hls
-        }
-        header {
-            Access-Control-Allow-Origin *
-            Access-Control-Allow-Methods "GET, OPTIONS"
-            Cache-Control "no-cache, no-store, must-revalidate"
-        }
+        root * /srv/hls
+        file_server
     }
 
     # ==========================
