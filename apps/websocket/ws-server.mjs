@@ -2,6 +2,10 @@ import { WebSocketServer } from "ws";
 import http from "http";
 import fs from "fs";
 import path from "path";
+import dns from "dns";
+import { promisify } from "util";
+
+const dnsLookup = promisify(dns.lookup);
 
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
@@ -170,7 +174,17 @@ async function startHlsForConference(conferenceId, router) {
     // SDP schreiben (wichtig: der ffmpeg container liest /sdp/input.sdp)
     writeSdp(`/sdp/input.sdp`);
 
-    const targetIp = "ffmpeg"; // <<<<<< wichtig im docker network
+    // DNS-Lookup für FFmpeg-Container (mit Fallback)
+    const ffmpegHostname = process.env.FFMPEG_HOST || "ffmpeg";
+    let targetIp;
+    try {
+        const result = await dnsLookup(ffmpegHostname);
+        targetIp = result.address;
+        console.log(`✅ Resolved ${ffmpegHostname} to IP: ${targetIp}`);
+    } catch (err) {
+        console.error(`❌ Failed to resolve ${ffmpegHostname}, using fallback IP`);
+        targetIp = process.env.FFMPEG_IP || "127.0.0.1";
+    }
 
     const transports = {
         cam: await createPlainOut(router, { ip: targetIp, port: 5004, rtcpPort: 5005 }),
