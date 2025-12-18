@@ -140,29 +140,29 @@ function writeSdp(filePath, videoSizes = { cam: null, screen: null }) {
     const [screenWidth, screenHeight] = screenSize.split("x");
     
     const sdp = `v=0
-o=- 0 0 IN IP4 0.0.0.0
-s=DigitalStage
-c=IN IP4 0.0.0.0
-t=0 0
-
-m=video 5004 RTP/AVP 96
-a=rtpmap:96 VP8/90000
-a=fmtp:96 max-fr=30;max-fs=3600
-a=framerate:30
-a=video_size:${camWidth}x${camHeight}
-a=recvonly
-
-m=video 5006 RTP/AVP 97
-a=rtpmap:97 VP8/90000
-a=fmtp:97 max-fr=30;max-fs=3600
-a=framerate:30
-a=video_size:${screenWidth}x${screenHeight}
-a=recvonly
-
-m=audio 5008 RTP/AVP 111
-a=rtpmap:111 OPUS/48000/2
-a=recvonly
-`;
+        o=- 0 0 IN IP4 0.0.0.0
+        s=DigitalStage
+        c=IN IP4 0.0.0.0
+        t=0 0
+        
+        m=video 5004 RTP/AVP 96
+        a=rtpmap:96 VP8/90000
+        a=fmtp:96 max-fr=30;max-fs=3600
+        a=framerate:30
+        a=video_size:${camWidth}x${camHeight}
+        a=recvonly
+        
+        m=video 5006 RTP/AVP 97
+        a=rtpmap:97 VP8/90000
+        a=fmtp:97 max-fr=30;max-fs=3600
+        a=framerate:30
+        a=video_size:${screenWidth}x${screenHeight}
+        a=recvonly
+        
+        m=audio 5008 RTP/AVP 111
+        a=rtpmap:111 OPUS/48000/2
+        a=recvonly
+        `;
     fs.writeFileSync(filePath, sdp);
 }
 
@@ -170,7 +170,7 @@ async function createPlainOut(router, { ip, port, rtcpPort }) {
     const transport = await router.createPlainTransport({
         listenIp: { ip: "0.0.0.0", announcedIp: null },
         rtcpMux: false,
-        comedia: false,
+        comedia: true,
     });
     // Verbinde den PlainTransport mit FFmpeg
     await transport.connect({ ip, port, rtcpPort });
@@ -246,6 +246,27 @@ async function startHlsForConference(conferenceId, router) {
     hlsIngest.set(conferenceId, state);
     return state;
 }
+
+function sanitizeRtpParameters(rtpParameters) {
+    return {
+        codecs: rtpParameters.codecs.filter(c =>
+            c.mimeType.toLowerCase() === "video/vp8" ||
+            c.mimeType.toLowerCase() === "audio/opus"
+        ),
+        encodings: [
+            {
+                ssrc: rtpParameters.encodings[0].ssrc
+            }
+        ],
+        headerExtensions: [], // 🔥 WICHTIG
+        rtcp: {
+            cname: rtpParameters.rtcp?.cname,
+            reducedSize: true,
+            mux: false
+        }
+    };
+}
+
 
 async function attachProducerToHls(conferenceId, router, producer, tag, userId) {
     const ingest = await startHlsForConference(conferenceId, router);
@@ -328,7 +349,7 @@ async function attachProducerToHls(conferenceId, router, producer, tag, userId) 
     // Producer auf dem PlainTransport erstellen (sendet Pakete an FFmpeg)
     const plainProducer = await plainTransport.produce({
         kind: pipeConsumer.kind,
-        rtpParameters: pipeConsumer.rtpParameters,
+        rtpParameters: sanitizeRtpParameters(pipeConsumer.rtpParameters)
     });
 
     // Alle Objekte behalten
