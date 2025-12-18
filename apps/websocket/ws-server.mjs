@@ -181,9 +181,12 @@ async function startHlsForConference(conferenceId, router) {
     if (hlsIngest.has(conferenceId)) return hlsIngest.get(conferenceId);
 
     // Ordner (server-bind mount) müssen existieren, sonst failt ffmpeg beim Schreiben
-    await ensureDir(`/hls/${conferenceId}/cam`);
-    await ensureDir(`/hls/${conferenceId}/screen`);
-    await ensureDir(`/hls/${conferenceId}/audio`);
+    //Achtung, da muss man das dann ändern für x-Konferenzen
+    //await ensureDir(`/hls/${conferenceId}/cam`);
+
+    await ensureDir(`/hls/testconf/cam`);
+    await ensureDir(`/hls/testconf/screen`);
+    await ensureDir(`/hls/testconf/audio`);
 
     // SDP schreiben (wichtig: der ffmpeg container liest /sdp/input.sdp)
     // Initial mit Standard-Größen, wird später aktualisiert wenn Producer hinzugefügt werden

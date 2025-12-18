@@ -292,9 +292,11 @@ function HLSViewer({
 
     // HLS-URLs konstruieren
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-    const camUrl = `${baseUrl}/hls/${conferenceId}/cam/index.m3u8`;
-    const screenUrl = `${baseUrl}/hls/${conferenceId}/screen/index.m3u8`;
-    const audioUrl = `${baseUrl}/hls/${conferenceId}/audio/index.m3u8`;
+    //Für x-Konferenzen gehört das wieder geändert!!!
+    //const camUrl = `${baseUrl}/hls/${conferenceId}/cam/index.m3u8`;
+    const camUrl = `${baseUrl}/hls/testconf/cam/index.m3u8`;
+    const screenUrl = `${baseUrl}/hls/testconf/screen/index.m3u8`;
+    const audioUrl = `${baseUrl}/hls/testconf/audio/index.m3u8`;
 
     // WebSocket Event: server:use-hls (optional, für sofortige Benachrichtigung)
     useEffect(() => {
@@ -375,7 +377,7 @@ function HLSViewer({
             }
         };
 
-        loadHls();
+        loadHls()
     }, [hasHls, camUrl, screenUrl, audioUrl]);
 
     if (!hasHls) {
