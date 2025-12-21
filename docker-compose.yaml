@@ -62,9 +62,7 @@ services:
         container_name: digitalstage_ffmpeg
         restart: unless-stopped
         ports:
-            - "5004:5004"
-            - "5006:5006"
-            - "5008:5008"
+            - "5004-5104:5004-5104"
         volumes:
             - /opt/digitalstage/hls:/hls
             - /opt/digitalstage/sdp:/sdp
