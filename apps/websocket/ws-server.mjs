@@ -191,7 +191,7 @@ async function initHlsForConference(conferenceId, router) {
     await ensureDir(`/hls/testconf/audio`);
 
     // FFmpeg IP auflösen
-    const ffmpegHostname = process.env.FFMPEG_HOST || "ffmpeg";
+    const ffmpegHostname = process.env.FFMPEG_HOST || "digitalstage_ffmpeg";
     let targetIp = process.env.FFMPEG_IP || "127.0.0.1";
 
     try {
