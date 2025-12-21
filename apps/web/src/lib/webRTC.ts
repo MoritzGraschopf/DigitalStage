@@ -579,11 +579,12 @@ export function useWebRTC(params: {
                         });
                 });
 
-                sendTransport.on("produce", ({ kind, rtpParameters }, cb, errCb) => {
+                sendTransport.on("produce", ({ kind, rtpParameters, appData }, cb, errCb) => {
                     request<{ id: string }>("sfu:produce", {
                         transportId: sendTransport.id,
                         kind,
                         rtpParameters: rtpParameters as RtpParameters,
+                        appData,
                     })
                         .then(({ id }) => cb({ id }))
                         .catch((e) => {

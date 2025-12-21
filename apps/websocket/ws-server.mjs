@@ -211,9 +211,9 @@ m=video 5004 RTP/AVP 96
 a=rtpmap:96 VP8/90000
 a=fmtp:96 max-fr=30;max-fs=${parseInt(camWidth) * parseInt(camHeight) / 256}
 a=recvonly
-m=video 5006 RTP/AVP 97
-a=rtpmap:97 VP8/90000
-a=fmtp:97 max-fr=30;max-fs=${parseInt(screenWidth) * parseInt(screenHeight) / 256}
+m=video 5006 RTP/AVP 96
+a=rtpmap:96 VP8/90000
+a=fmtp:96 max-fr=30;max-fs=${parseInt(screenWidth) * parseInt(screenHeight) / 256}
 a=recvonly
 m=audio 5008 RTP/AVP 111
 a=rtpmap:111 opus/48000/2
