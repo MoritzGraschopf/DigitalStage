@@ -82,6 +82,7 @@ jobs:
           MEDIASOUP_MAX_PORT=${{ secrets.MEDIASOUP_MAX_PORT }}
           MEDIASOUP_LISTEN_IP=${{ secrets.MEDIASOUP_LISTEN_IP }}
           NODE_ENV=${{ secrets.NODE_ENV }}
+          FFMPEG_IP=${{ secrets.FFMPEG_IP }}
           ENVEOF
           chmod 600 .env
 
