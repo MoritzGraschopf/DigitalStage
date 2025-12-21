@@ -140,29 +140,23 @@ function writeSdp(filePath, videoSizes = { cam: null, screen: null }) {
     const [screenWidth, screenHeight] = screenSize.split("x");
     
     const sdp = `v=0
-        o=- 0 0 IN IP4 0.0.0.0
-        s=DigitalStage
-        c=IN IP4 0.0.0.0
-        t=0 0
-        
-        m=video 5004 RTP/AVP 96
-        a=rtpmap:96 VP8/90000
-        a=fmtp:96 max-fr=30;max-fs=3600
-        a=framerate:30
-        a=video_size:${camWidth}x${camHeight}
-        a=recvonly
-        
-        m=video 5006 RTP/AVP 97
-        a=rtpmap:97 VP8/90000
-        a=fmtp:97 max-fr=30;max-fs=3600
-        a=framerate:30
-        a=video_size:${screenWidth}x${screenHeight}
-        a=recvonly
-        
-        m=audio 5008 RTP/AVP 111
-        a=rtpmap:111 OPUS/48000/2
-        a=recvonly
-        `;
+o=- 0 0 IN IP4 127.0.0.1
+s=DigitalStage
+c=IN IP4 127.0.0.1
+t=0 0
+
+m=video 5004 RTP/AVP 96
+a=rtpmap:96 VP8/90000
+a=recvonly
+
+m=video 5006 RTP/AVP 97
+a=rtpmap:97 VP8/90000
+a=recvonly
+
+m=audio 5008 RTP/AVP 111
+a=rtpmap:111 opus/48000/2
+a=recvonly
+    `;
     fs.writeFileSync(filePath, sdp);
 }
 
