@@ -86,8 +86,9 @@ services:
           -hls_segment_filename /hls/testconf/screen/seg_%05d.ts /hls/testconf/screen/index.m3u8 \
           -map 0:a:0? -c:a aac -b:a 128k \
           -f hls -hls_time 2 -hls_list_size 6 -hls_flags delete_segments+append_list \
-          -hls_segment_filename /hls/testconf/audio/seg_%05d.ts /hls/testconf/audio/index.m3u8volumes:
-    db-data:
-    registry-data:
-    caddy-data:
-    caddy-config:
+          -hls_segment_filename /hls/testconf/audio/seg_%05d.ts /hls/testconf/audio/index.m3u8
+volumes:
+  db-data:
+  registry-data:
+  caddy-data:
+  caddy-config:
