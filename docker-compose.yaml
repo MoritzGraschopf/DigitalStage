@@ -61,6 +61,8 @@ services:
         image: jrottenberg/ffmpeg:6.1-alpine
         container_name: digitalstage_ffmpeg
         restart: unless-stopped
+        ports:
+            - "5004-5104:5004-5104"
         volumes:
             - /opt/digitalstage/hls:/hls
             - /opt/digitalstage/sdp:/sdp
