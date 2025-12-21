@@ -20,7 +20,8 @@ const notInConference = new Map();
 const rtcRooms = new Map();
 
 // HLS Ingest State pro Conference
-const hlsIngest = new Map(); // conferenceId -> { transports, consumers, activeAudioUserId }
+// conferenceId -> HlsState
+const hlsIngest = new Map();
 
 const WS = { OPEN: 1 };
 function now() { return Date.now(); }
@@ -139,24 +140,26 @@ function writeSdp(filePath, videoSizes = { cam: null, screen: null }) {
     const [camWidth, camHeight] = camSize.split("x");
     const [screenWidth, screenHeight] = screenSize.split("x");
     
+    // SDP mit korrekter Formatierung (keine führenden Leerzeichen)
+    // Für VP8 gibt es kein Standard-SDP-Attribut für Auflösung,
+    // aber wir können sie in fmtp als Hinweis angeben
     const sdp = `v=0
 o=- 0 0 IN IP4 127.0.0.1
 s=DigitalStage
 c=IN IP4 127.0.0.1
 t=0 0
-
 m=video 5004 RTP/AVP 96
 a=rtpmap:96 VP8/90000
+a=fmtp:96 max-fr=30;max-fs=${parseInt(camWidth) * parseInt(camHeight) / 256}
 a=recvonly
-
 m=video 5006 RTP/AVP 97
 a=rtpmap:97 VP8/90000
+a=fmtp:97 max-fr=30;max-fs=${parseInt(screenWidth) * parseInt(screenHeight) / 256}
 a=recvonly
-
 m=audio 5008 RTP/AVP 111
 a=rtpmap:111 opus/48000/2
 a=recvonly
-    `;
+`;
     fs.writeFileSync(filePath, sdp);
 }
 
@@ -164,56 +167,48 @@ async function createPlainOut(router, { ip, port, rtcpPort }) {
     const transport = await router.createPlainTransport({
         listenIp: { ip: "0.0.0.0", announcedIp: null },
         rtcpMux: false,
-        comedia: true,
+        comedia: false,
     });
     // Verbinde den PlainTransport mit FFmpeg
     await transport.connect({ ip, port, rtcpPort });
     return transport;
 }
 
-async function startHlsForConference(conferenceId, router) {
-    if (hlsIngest.has(conferenceId)) return hlsIngest.get(conferenceId);
+async function initHlsForConference(conferenceId, router) {
+    if (hlsIngest.has(conferenceId)) {
+        return hlsIngest.get(conferenceId);
+    }
 
-    // Ordner (server-bind mount) müssen existieren, sonst failt ffmpeg beim Schreiben
-    //Achtung, da muss man das dann ändern für x-Konferenzen
-    //await ensureDir(`/hls/${conferenceId}/cam`);
-
+    // Verzeichnisse vorbereiten
     await ensureDir(`/hls/testconf/cam`);
     await ensureDir(`/hls/testconf/screen`);
     await ensureDir(`/hls/testconf/audio`);
 
-    // SDP schreiben (wichtig: der ffmpeg container liest /sdp/input.sdp)
-    // Initial mit Standard-Größen, wird später aktualisiert wenn Producer hinzugefügt werden
-    writeSdp(`/sdp/input.sdp`);
-
-    // DNS-Lookup für FFmpeg-Container (mit Fallback)
+    // FFmpeg IP auflösen
     const ffmpegHostname = process.env.FFMPEG_HOST || "ffmpeg";
-    let targetIp;
+    let targetIp = "127.0.0.1";
+
     try {
-        const result = await dnsLookup(ffmpegHostname);
-        targetIp = result.address;
-        console.log(`✅ Resolved ${ffmpegHostname} to IP: ${targetIp}`);
-    } catch (err) {
-        console.error(`❌ Failed to resolve ${ffmpegHostname}, using fallback IP`);
-        targetIp = process.env.FFMPEG_IP || "127.0.0.1";
+        const res = await dnsLookup(ffmpegHostname);
+        targetIp = res.address;
+    } catch {
+        // Fallback bereits gesetzt
     }
 
-    // Separaten Router für FFmpeg erstellen (für PipeTransport)
+    // Eigener Router für FFmpeg
     const ffmpegRouter = await worker.createRouter({ mediaCodecs });
 
-    // PipeTransport auf dem Haupt-Router erstellen
+    // PipeTransport zwischen Main-Router und FFmpeg-Router
     const pipeTransport = await router.createPipeTransport({
         listenIp: { ip: "127.0.0.1", announcedIp: null },
         enableSctp: false,
     });
 
-    // PipeTransport auf dem FFmpeg-Router erstellen
     const ffmpegPipeTransport = await ffmpegRouter.createPipeTransport({
         listenIp: { ip: "127.0.0.1", announcedIp: null },
         enableSctp: false,
     });
 
-    // Die beiden PipeTransports verbinden
     await pipeTransport.connect({
         ip: ffmpegPipeTransport.tuple.localIp,
         port: ffmpegPipeTransport.tuple.localPort,
@@ -224,24 +219,37 @@ async function startHlsForConference(conferenceId, router) {
         port: pipeTransport.tuple.localPort,
     });
 
-    // PlainTransports auf dem FFmpeg-Router erstellen
+    // PlainTransports → FFmpeg
     const transports = {
         cam: await createPlainOut(ffmpegRouter, { ip: targetIp, port: 5004, rtcpPort: 5005 }),
         screen: await createPlainOut(ffmpegRouter, { ip: targetIp, port: 5006, rtcpPort: 5007 }),
         audio: await createPlainOut(ffmpegRouter, { ip: targetIp, port: 5008, rtcpPort: 5009 }),
     };
 
-    const state = { 
+    const state = {
+        initialized: true,
+        started: false,
         router: ffmpegRouter,
         pipeTransport,
         ffmpegPipeTransport,
-        transports, 
-        consumers: { cam: null, screen: null, audio: null }, 
+        transports,
+        consumers: { cam: null, screen: null, audio: null },
+        videoSizes: { cam: null, screen: null },
         activeAudioUserId: null,
-        videoSizes: { cam: null, screen: null }
     };
+
     hlsIngest.set(conferenceId, state);
     return state;
+}
+
+function startFfmpeg(conferenceId) {
+    console.log("🚀 Starting FFmpeg for conference", conferenceId);
+
+    // FFmpeg läuft im eigenen Container → hier nur Trigger
+    // Falls ihr FFmpeg per child_process startet:
+    // spawn("ffmpeg", [...])
+
+    // WICHTIG: SDP MUSS JETZT SCHON KORREKT SEIN
 }
 
 function sanitizeRtpParameters(rtpParameters) {
@@ -264,11 +272,10 @@ function sanitizeRtpParameters(rtpParameters) {
     };
 }
 
-
 async function attachProducerToHls(conferenceId, router, producer, tag, userId) {
-    const ingest = await startHlsForConference(conferenceId, router);
+    const ingest = await initHlsForConference(conferenceId, router);
 
-    // schon belegt? (bei 1 conference test: überschreiben/neu setzen)
+    // Cleanup alter Consumer wenn bereits belegt
     if (ingest.consumers[tag]) {
         try {
             const oldConsumer = ingest.consumers[tag];
@@ -278,60 +285,51 @@ async function attachProducerToHls(conferenceId, router, producer, tag, userId) 
             if (oldConsumer?.pipeConsumer) oldConsumer.pipeConsumer.close();
             if (oldConsumer?.plainProducer) oldConsumer.plainProducer.close();
             if (oldConsumer?.ffmpegTempTransport) oldConsumer.ffmpegTempTransport.close();
-        } catch {}
+        } catch {
+            // Ignore cleanup errors
+        }
         ingest.consumers[tag] = null;
     }
 
-    const plainTransport = ingest.transports[tag];
-    const pipeTransport = ingest.pipeTransport;
-    const ffmpegPipeTransport = ingest.ffmpegPipeTransport;
-    const ffmpegRouter = ingest.router;
+    // Nur EIN Video-Producer startet HLS
+    const isVideo = producer.kind === "video";
 
-    // Um einen Consumer zu erstellen, brauchen wir einen Transport
-    // Wir erstellen einen temporären WebRTC-Transport für den Consumer
+    // Video-Größe festlegen (konservativ, stabil)
+    if (isVideo) {
+        ingest.videoSizes[tag] =
+            tag === "screen" ? "1920x1080" : "1280x720";
+
+        // SDP JETZT schreiben – mit echten Größen
+        writeSdp(`/sdp/input.sdp`, ingest.videoSizes);
+    }
+
+    // FFmpeg GENAU EINMAL starten
+    if (isVideo && !ingest.started) {
+        startFfmpeg(conferenceId);
+        ingest.started = true;
+    }
+
+    // --- Rest: Media weiterleiten ---
+    // (unverändert zu eurem bestehenden Pipe → Plain Flow)
+
     const tempTransport = await router.createWebRtcTransport({
         listenIps: [{ ip: "127.0.0.1", announcedIp: null }],
         enableUdp: false,
         enableTcp: true,
     });
 
-    // Consumer vom Router erstellen (über den temporären Transport)
-    // Dieser Consumer empfängt die Pakete vom Producer
     const consumer = await tempTransport.consume({
         producerId: producer.id,
         rtpCapabilities: router.rtpCapabilities,
         paused: false,
     });
 
-    // Video-Größe aus RTP-Parametern extrahieren (falls vorhanden)
-    if (consumer.kind === "video" && consumer.rtpParameters.encodings?.[0]) {
-        const encoding = consumer.rtpParameters.encodings[0];
-        // Versuche Video-Größe aus encoding zu extrahieren oder verwende Standard
-        let videoSize = null;
-        if (encoding.scaleResolutionDownBy) {
-            // Wenn scaleResolutionDownBy vorhanden, können wir die ursprüngliche Größe schätzen
-            // Standard: 1280x720 für cam, 1920x1080 für screen
-            videoSize = tag === "screen" ? "1920x1080" : "1280x720";
-        } else {
-            videoSize = tag === "screen" ? "1920x1080" : "1280x720";
-        }
-        
-        // SDP-File mit Video-Größe aktualisieren
-        const currentSizes = ingest.videoSizes || { cam: null, screen: null };
-        currentSizes[tag] = videoSize;
-        ingest.videoSizes = currentSizes;
-        writeSdp(`/sdp/input.sdp`, currentSizes);
-    }
-
-    // Producer auf dem PipeTransport erstellen (leitet Pakete zum FFmpeg-Router weiter)
-    const pipeProducer = await pipeTransport.produce({
+    const pipeProducer = await ingest.pipeTransport.produce({
         kind: consumer.kind,
         rtpParameters: consumer.rtpParameters,
     });
 
-    // Consumer auf dem FFmpeg-Router erstellen (empfängt Pakete vom PipeProducer)
-    // Wir brauchen einen Transport auf dem FFmpeg-Router für den Consumer
-    const ffmpegTempTransport = await ffmpegRouter.createWebRtcTransport({
+    const ffmpegTempTransport = await ingest.router.createWebRtcTransport({
         listenIps: [{ ip: "127.0.0.1", announcedIp: null }],
         enableUdp: false,
         enableTcp: true,
@@ -339,19 +337,26 @@ async function attachProducerToHls(conferenceId, router, producer, tag, userId) 
 
     const pipeConsumer = await ffmpegTempTransport.consume({
         producerId: pipeProducer.id,
-        rtpCapabilities: ffmpegRouter.rtpCapabilities,
+        rtpCapabilities: ingest.router.rtpCapabilities,
         paused: false,
     });
 
-    // Producer auf dem PlainTransport erstellen (sendet Pakete an FFmpeg)
-    const plainProducer = await plainTransport.produce({
+    const plainProducer = await ingest.transports[tag].produce({
         kind: pipeConsumer.kind,
-        rtpParameters: sanitizeRtpParameters(pipeConsumer.rtpParameters)
+        rtpParameters: sanitizeRtpParameters(pipeConsumer.rtpParameters),
     });
 
-    // Alle Objekte behalten
-    ingest.consumers[tag] = { consumer, pipeProducer, pipeConsumer, plainProducer, tempTransport, ffmpegTempTransport };
+    // Alle Objekte speichern für späteres Cleanup
+    ingest.consumers[tag] = {
+        consumer,
+        pipeProducer,
+        pipeConsumer,
+        plainProducer,
+        tempTransport,
+        ffmpegTempTransport,
+    };
 
+    // Event-Handler für automatisches Cleanup
     consumer.on("transportclose", () => {
         if (ingest.consumers[tag]) ingest.consumers[tag] = null;
     });
@@ -359,8 +364,10 @@ async function attachProducerToHls(conferenceId, router, producer, tag, userId) 
         if (ingest.consumers[tag]) ingest.consumers[tag] = null;
     });
 
-    // Audio-Owner merken (optional)
-    if (tag === "audio") ingest.activeAudioUserId = userId;
+    // Audio-Owner merken (für zukünftige Audio-Failover-Logik)
+    if (tag === "audio") {
+        ingest.activeAudioUserId = userId;
+    }
 }
 
 // ✅ CHANGED: Transport helper (ANNOUNCED_IP matcht .env)
