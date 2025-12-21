@@ -180,6 +180,7 @@ async function createPlainOut(router, { ip, port, rtcpPort }) {
     return transport;
 }
 
+/*
 async function initHlsForConference(conferenceId, router) {
     if (hlsIngest.has(conferenceId)) {
         return hlsIngest.get(conferenceId);
@@ -249,6 +250,46 @@ async function initHlsForConference(conferenceId, router) {
     return state;
 }
 
+*/
+
+async function initHlsForConference(conferenceId, router) {
+    if (hlsIngest.has(conferenceId)) {
+        return hlsIngest.get(conferenceId);
+    }
+
+    // sicherstellen, dass SDP-Verzeichnis existiert
+    await ensureDir("/sdp");
+
+    const ffmpegHostname = process.env.FFMPEG_HOST || "digitalstage_ffmpeg";
+    let targetIp = process.env.FFMPEG_IP || "127.0.0.1";
+
+    try {
+        const res = await dnsLookup(ffmpegHostname);
+        targetIp = res.address;
+        console.log(`✅ Resolved FFmpeg hostname '${ffmpegHostname}' to IP: ${targetIp}`);
+    } catch {
+        console.warn(`⚠️  FFmpeg DNS failed, using fallback IP ${targetIp}`);
+    }
+
+    const transports = {
+        cam: await createPlainOut(router, { ip: targetIp, port: 5004, rtcpPort: 5005 }),
+        screen: await createPlainOut(router, { ip: targetIp, port: 5006, rtcpPort: 5007 }),
+        audio: await createPlainOut(router, { ip: targetIp, port: 5008, rtcpPort: 5009 }),
+    };
+
+    const state = {
+        started: false,
+        transports,
+        consumers: {},
+        videoSizes: {},
+    };
+
+    hlsIngest.set(conferenceId, state);
+    return state;
+}
+
+
+
 function startFfmpeg(conferenceId) {
     console.log("🚀 Starting FFmpeg for conference", conferenceId);
 
@@ -279,6 +320,7 @@ function sanitizeRtpParameters(rtpParameters) {
     };
 }
 
+/*
 async function attachProducerToHls(conferenceId, router, producer, tag, userId) {
     const ingest = await initHlsForConference(conferenceId, router);
 
@@ -395,6 +437,44 @@ async function attachProducerToHls(conferenceId, router, producer, tag, userId) 
         ingest.activeAudioUserId = userId;
     }
 }
+
+*/
+
+async function attachProducerToHls(conferenceId, router, producer, tag) {
+    const ingest = await initHlsForConference(conferenceId, router);
+
+    // alte Consumer sauber schließen (wichtig!)
+    if (ingest.consumers[tag]) {
+        try {
+            ingest.consumers[tag].close();
+        } catch {}
+        ingest.consumers[tag] = null;
+    }
+
+    // bei erstem Video: SDP schreiben + FFmpeg starten
+    if (!ingest.started && producer.kind === "video") {
+        ingest.videoSizes[tag] =
+            tag === "screen" ? "1920x1080" : "1280x720";
+
+        writeSdp("/sdp/input.sdp", ingest.videoSizes);
+        startFfmpeg(conferenceId);
+        ingest.started = true;
+    }
+
+    const plainTransport = ingest.transports[tag];
+
+    const consumer = await plainTransport.consume({
+        producerId: producer.id,
+        rtpCapabilities: router.rtpCapabilities,
+        paused: false,
+    });
+
+    console.log(`✅ RTP flowing to FFmpeg (${tag}) → consumer ${consumer.id}`);
+
+    ingest.consumers[tag] = consumer;
+}
+
+
 
 // ✅ CHANGED: Transport helper (ANNOUNCED_IP matcht .env)
 async function createWebRtcTransport(router) {
@@ -721,14 +801,14 @@ wss.on("connection", (ws) => {
                 const mediaTag = appData?.mediaTag; // "cam" | "screen" | undefined
                 if (producer.kind === "video") {
                     if (mediaTag === "screen") {
-                        await attachProducerToHls(conferenceId, room.router, producer, "screen", userId).catch(err => console.error("HLS Screen attach failed:", err));
+                        await attachProducerToHls(conferenceId, room.router, producer, "screen").catch(err => console.error("HLS Screen attach failed:", err));
                     } else {
                         // default: cam
-                        await attachProducerToHls(conferenceId, room.router, producer, "cam", userId).catch(err => console.error("HLS Cam attach failed:", err));
+                        await attachProducerToHls(conferenceId, room.router, producer, "cam").catch(err => console.error("HLS Cam attach failed:", err));
                     }
                 } else if (producer.kind === "audio") {
                     // Fürs Erste: nur eine Audioquelle aktiv (Presenter ODER Questioner)
-                    await attachProducerToHls(conferenceId, room.router, producer, "audio", userId).catch(err => console.error("HLS Audio attach failed:", err));
+                    await attachProducerToHls(conferenceId, room.router, producer, "audio").catch(err => console.error("HLS Audio attach failed:", err));
                 }
 
                 respond(ws, requestId, { id: producer.id }); // ✅ CHANGED
