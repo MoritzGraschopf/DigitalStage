@@ -165,12 +165,18 @@ a=recvonly
 
 async function createPlainOut(router, { ip, port, rtcpPort }) {
     const transport = await router.createPlainTransport({
-        listenIp: { ip: "127.0.0.1", announcedIp: null },
+        listenIp: { ip: "0.0.0.0", announcedIp: null },
         rtcpMux: false,
         comedia: false,
     });
+    
     // Verbinde den PlainTransport mit FFmpeg
     await transport.connect({ ip, port, rtcpPort });
+    
+    console.log(`✅ PlainTransport created:`);
+    console.log(`   - Listening on: ${transport.tuple.localIp}:${transport.tuple.localPort}`);
+    console.log(`   - Connected to FFmpeg at: ${ip}:${port} (RTP) / ${ip}:${rtcpPort} (RTCP)`);
+    
     return transport;
 }
 
@@ -186,13 +192,14 @@ async function initHlsForConference(conferenceId, router) {
 
     // FFmpeg IP auflösen
     const ffmpegHostname = process.env.FFMPEG_HOST || "ffmpeg";
-    let targetIp = "127.0.0.1";
+    let targetIp = process.env.FFMPEG_IP || "127.0.0.1";
 
     try {
         const res = await dnsLookup(ffmpegHostname);
         targetIp = res.address;
-    } catch {
-        // Fallback bereits gesetzt
+        console.log(`✅ Resolved FFmpeg hostname '${ffmpegHostname}' to IP: ${targetIp}`);
+    } catch (err) {
+        console.log(`⚠️  Could not resolve '${ffmpegHostname}', using fallback IP: ${targetIp}`);
     }
 
     // Eigener Router für FFmpeg
@@ -324,6 +331,11 @@ async function attachProducerToHls(conferenceId, router, producer, tag, userId) 
         paused: false,
     });
 
+    // Consumer explizit starten (falls nötig)
+    if (consumer.paused) {
+        await consumer.resume();
+    }
+
     const pipeProducer = await ingest.pipeTransport.produce({
         kind: consumer.kind,
         rtpParameters: consumer.rtpParameters,
@@ -341,10 +353,24 @@ async function attachProducerToHls(conferenceId, router, producer, tag, userId) 
         paused: false,
     });
 
+    // Consumer explizit starten (falls nötig)
+    if (pipeConsumer.paused) {
+        await pipeConsumer.resume();
+    }
+
     const plainProducer = await ingest.transports[tag].produce({
         kind: pipeConsumer.kind,
         rtpParameters: sanitizeRtpParameters(pipeConsumer.rtpParameters),
     });
+
+    // Event-Handler für Debugging
+    plainProducer.on("transportclose", () => {
+        console.log(`⚠️  PlainProducer transport closed for ${tag}`);
+    });
+
+    console.log(`✅ HLS Producer attached: ${tag} (${producer.kind}) -> FFmpeg`);
+    console.log(`   - PlainProducer ID: ${plainProducer.id}`);
+    console.log(`   - SSRC: ${sanitizeRtpParameters(pipeConsumer.rtpParameters).encodings[0]?.ssrc}`);
 
     // Alle Objekte speichern für späteres Cleanup
     ingest.consumers[tag] = {
