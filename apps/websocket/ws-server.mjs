@@ -47,6 +47,31 @@ const mediaCodecs = [
     }
 ];
 
+const ffmpegRtpCapabilities = {
+    codecs: [
+        {
+            kind: "audio",
+            mimeType: "audio/opus",
+            preferredPayloadType: 111,
+            clockRate: 48000,
+            channels: 2,
+            parameters: {},
+            rtcpFeedback: []
+        },
+        {
+            kind: "video",
+            mimeType: "video/VP8",
+            preferredPayloadType: 96,
+            clockRate: 90000,
+            parameters: {},
+            rtcpFeedback: []
+        }
+    ],
+    headerExtensions: [],
+    fecMechanisms: []
+};
+
+
 async function getOrCreateRoom(confId) {
     if (rtcRooms.has(confId)) return rtcRooms.get(confId);
 
@@ -495,9 +520,23 @@ async function attachProducerToHls(conferenceId, router, producer, tag) {
 
     const consumer = await plainTransport.consume({
         producerId: producer.id,
-        rtpCapabilities: router.rtpCapabilities,
+        rtpCapabilities: ffmpegRtpCapabilities,
         paused: false,
     });
+
+    if (consumer.kind === "video") {
+        try {
+            await consumer.requestKeyFrame();
+        }
+        catch {}
+
+        const iv = setInterval(() => {
+            consumer.requestKeyFrame().catch(() => {});
+        }, 2000);
+
+        consumer.on("transportclose", () => clearInterval(iv));
+        consumer.on("producerclose", () => clearInterval(iv));
+    }
 
     console.log(`✅ RTP flowing to FFmpeg (${tag}) → consumer ${consumer.id}`);
 
