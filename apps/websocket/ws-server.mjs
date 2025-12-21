@@ -1,18 +1,19 @@
-import { WebSocketServer } from "ws";
+import {WebSocketServer} from "ws";
 import http from "http";
 import fs from "fs";
 import path from "path";
 import dns from "dns";
-import { promisify } from "util";
+import {promisify} from "util";
 
 const dnsLookup = promisify(dns.lookup);
 
-import { createRequire } from "module";
+import {createRequire} from "module";
+
 const require = createRequire(import.meta.url);
 const mediasoup = require("mediasoup");
 
 const wsServer = http.createServer();
-const wss = new WebSocketServer({ server: wsServer });
+const wss = new WebSocketServer({server: wsServer});
 
 const inConference = new Map();
 const notInConference = new Map();
@@ -23,8 +24,11 @@ const rtcRooms = new Map();
 // conferenceId -> HlsState
 const hlsIngest = new Map();
 
-const WS = { OPEN: 1 };
-function now() { return Date.now(); }
+const WS = {OPEN: 1};
+
+function now() {
+    return Date.now();
+}
 
 let worker;
 
@@ -46,7 +50,7 @@ const mediaCodecs = [
 async function getOrCreateRoom(confId) {
     if (rtcRooms.has(confId)) return rtcRooms.get(confId);
 
-    const router = await worker.createRouter({ mediaCodecs });
+    const router = await worker.createRouter({mediaCodecs});
     const room = {
         router,
         peers: new Map(), // userId -> PeerState
@@ -82,6 +86,22 @@ function broadcastRoom(confId, exceptUserId, payload) {
     }
 }
 
+async function cleanupHls(confId) {
+    const ingest = hlsIngest.get(confId);
+    if (!ingest) return;
+
+    try {
+        for (const c of Object.values(ingest.consumers || {})) {
+            try { c?.close(); } catch {}
+        }
+        for (const t of Object.values(ingest.transports || {})) {
+            try { t?.close(); } catch {}
+        }
+    } finally {
+        hlsIngest.delete(confId);
+    }
+}
+
 async function cleanupPeer(confId, userId) {
     const room = rtcRooms.get(confId);
     if (!room) return;
@@ -90,26 +110,39 @@ async function cleanupPeer(confId, userId) {
     if (!peer) return;
 
     for (const c of peer.consumers.values()) {
-        try { c.close(); } catch {}
+        try {
+            c.close();
+        } catch {
+        }
     }
     peer.consumers.clear();
 
     for (const p of peer.producers.values()) {
-        try { p.close(); } catch {}
-        broadcastRoom(confId, userId, { type: "sfu:producer-closed", userId, producerId: p.id });
+        try {
+            p.close();
+        } catch {
+        }
+        broadcastRoom(confId, userId, {type: "sfu:producer-closed", userId, producerId: p.id});
     }
     peer.producers.clear();
 
     for (const t of peer.transports.values()) {
-        try { t.close(); } catch {}
+        try {
+            t.close();
+        } catch {
+        }
     }
     peer.transports.clear();
 
     room.peers.delete(userId);
-    broadcastRoom(confId, userId, { type: "sfu:peer-left", userId });
+    broadcastRoom(confId, userId, {type: "sfu:peer-left", userId});
 
     if (room.peers.size === 0) {
-        try { room.router.close(); } catch {}
+        await cleanupHls(confId);
+        try {
+            room.router.close();
+        }
+        catch {}
         rtcRooms.delete(confId);
     }
 }
@@ -118,10 +151,11 @@ async function cleanupPeer(confId, userId) {
    ✅ NEW: request/response helpers
    ========================= */
 function respond(ws, requestId, data = null) { // ✅ NEW
-    safeSend(ws, { type: "sfu:response", responseId: requestId, ok: true, data });
+    safeSend(ws, {type: "sfu:response", responseId: requestId, ok: true, data});
 }
+
 function respondError(ws, requestId, error) { // ✅ NEW
-    safeSend(ws, { type: "sfu:response", responseId: requestId, ok: false, error: String(error || "error") });
+    safeSend(ws, {type: "sfu:response", responseId: requestId, ok: false, error: String(error || "error")});
 }
 
 // =========================
@@ -129,24 +163,24 @@ function respondError(ws, requestId, error) { // ✅ NEW
 // =========================
 
 async function ensureDir(p) {
-    await fs.promises.mkdir(p, { recursive: true });
+    await fs.promises.mkdir(p, {recursive: true});
 }
 
-function writeSdp(filePath, videoSizes = { cam: null, screen: null }) {
+function writeSdp(filePath, videoSizes = {cam: null, screen: null}) {
     // Standard-Video-Größe, falls nicht angegeben (1280x720)
     const camSize = videoSizes.cam || "1280x720";
     const screenSize = videoSizes.screen || "1920x1080";
-    
+
     const [camWidth, camHeight] = camSize.split("x");
     const [screenWidth, screenHeight] = screenSize.split("x");
-    
+
     // SDP mit korrekter Formatierung (keine führenden Leerzeichen)
     // Für VP8 gibt es kein Standard-SDP-Attribut für Auflösung,
     // aber wir können sie in fmtp als Hinweis angeben
     const sdp = `v=0
 o=- 0 0 IN IP4 127.0.0.1
 s=DigitalStage
-c=IN IP4 127.0.0.1
+c=IN IP4 0.0.0.0
 t=0 0
 m=video 5004 RTP/AVP 96
 a=rtpmap:96 VP8/90000
@@ -163,20 +197,20 @@ a=recvonly
     fs.writeFileSync(filePath, sdp);
 }
 
-async function createPlainOut(router, { ip, port, rtcpPort }) {
+async function createPlainOut(router, {ip, port, rtcpPort}) {
     const transport = await router.createPlainTransport({
-        listenIp: { ip: "0.0.0.0", announcedIp: null },
+        listenIp: {ip: "0.0.0.0", announcedIp: null},
         rtcpMux: false,
         comedia: false,
     });
-    
+
     // Verbinde den PlainTransport mit FFmpeg
-    await transport.connect({ ip, port, rtcpPort });
-    
+    await transport.connect({ip, port, rtcpPort});
+
     console.log(`✅ PlainTransport created:`);
     console.log(`   - Listening on: ${transport.tuple.localIp}:${transport.tuple.localPort}`);
     console.log(`   - Connected to FFmpeg at: ${ip}:${port} (RTP) / ${ip}:${rtcpPort} (RTCP)`);
-    
+
     return transport;
 }
 
@@ -253,11 +287,12 @@ async function initHlsForConference(conferenceId, router) {
 */
 
 async function initHlsForConference(conferenceId, router) {
-    if (hlsIngest.has(conferenceId)) {
-        return hlsIngest.get(conferenceId);
-    }
+    const existing = hlsIngest.get(conferenceId);
+    if (existing && existing.routerId === router.id)
+        return existing;
+    if (existing)
+        await cleanupHls(conferenceId);
 
-    // sicherstellen, dass SDP-Verzeichnis existiert
     await ensureDir("/sdp");
 
     const ffmpegHostname = process.env.FFMPEG_HOST || "digitalstage_ffmpeg";
@@ -272,16 +307,17 @@ async function initHlsForConference(conferenceId, router) {
     }
 
     const transports = {
-        cam: await createPlainOut(router, { ip: targetIp, port: 5004, rtcpPort: 5005 }),
-        screen: await createPlainOut(router, { ip: targetIp, port: 5006, rtcpPort: 5007 }),
-        audio: await createPlainOut(router, { ip: targetIp, port: 5008, rtcpPort: 5009 }),
+        cam: await createPlainOut(router, {ip: targetIp, port: 5004, rtcpPort: 5005}),
+        screen: await createPlainOut(router, {ip: targetIp, port: 5006, rtcpPort: 5007}),
+        audio: await createPlainOut(router, {ip: targetIp, port: 5008, rtcpPort: 5009}),
     };
 
     const state = {
-        started: false,
+        routerId: router.id,
+        started:false,
         transports,
-        consumers: {},
-        videoSizes: {},
+        consumers:{},
+        videoSizes:{}
     };
 
     hlsIngest.set(conferenceId, state);
@@ -289,15 +325,8 @@ async function initHlsForConference(conferenceId, router) {
 }
 
 
-
 function startFfmpeg(conferenceId) {
     console.log("🚀 Starting FFmpeg for conference", conferenceId);
-
-    // FFmpeg läuft im eigenen Container → hier nur Trigger
-    // Falls ihr FFmpeg per child_process startet:
-    // spawn("ffmpeg", [...])
-
-    // WICHTIG: SDP MUSS JETZT SCHON KORREKT SEIN
 }
 
 function sanitizeRtpParameters(rtpParameters) {
@@ -447,7 +476,8 @@ async function attachProducerToHls(conferenceId, router, producer, tag) {
     if (ingest.consumers[tag]) {
         try {
             ingest.consumers[tag].close();
-        } catch {}
+        } catch {
+        }
         ingest.consumers[tag] = null;
     }
 
@@ -473,8 +503,6 @@ async function attachProducerToHls(conferenceId, router, producer, tag) {
 
     ingest.consumers[tag] = consumer;
 }
-
-
 
 // ✅ CHANGED: Transport helper (ANNOUNCED_IP matcht .env)
 async function createWebRtcTransport(router) {
@@ -533,11 +561,17 @@ wss.on("connection", (ws) => {
 
     const hb = setInterval(() => {
         if (!ws.isAlive) {
-            try { ws.terminate(); } catch {}
+            try {
+                ws.terminate();
+            } catch {
+            }
             return;
         }
         ws.isAlive = false;
-        try { ws.ping(); } catch {}
+        try {
+            ws.ping();
+        } catch {
+        }
     }, 15000);
 
     ws.on("close", async () => {
@@ -678,7 +712,7 @@ wss.on("connection", (ws) => {
 
         // 1) join
         if (msg.type === "sfu:join") { // ✅ CHANGED
-            const { requestId, userId, conferenceId, role } = msg;
+            const {requestId, userId, conferenceId, role} = msg;
             try {
                 ws.userId = userId;
                 ws.conferenceId = conferenceId;
@@ -689,14 +723,17 @@ wss.on("connection", (ws) => {
                 if (room.peers.has(userId)) {
                     const oldPeer = room.peers.get(userId);
                     if (oldPeer?.ws && oldPeer.ws !== ws) {
-                        try { oldPeer.ws.close(); } catch {}
+                        try {
+                            oldPeer.ws.close();
+                        } catch {
+                        }
                         await cleanupPeer(conferenceId, userId);
                     }
                 }
 
                 if (role === "VIEWER") {
-                    safeSend(ws, { type: "server:use-hls", conferenceId });
-                    respond(ws, requestId, { routerRtpCapabilities: room.router.rtpCapabilities, existingProducers: [] });
+                    safeSend(ws, {type: "server:use-hls", conferenceId});
+                    respond(ws, requestId, {routerRtpCapabilities: room.router.rtpCapabilities, existingProducers: []});
                     return;
                 }
 
@@ -708,7 +745,7 @@ wss.on("connection", (ws) => {
                 for (const [pid, otherPeer] of room.peers.entries()) {
                     if (pid === userId) continue;
                     for (const prod of otherPeer.producers.values()) {
-                        existingProducers.push({ producerId: prod.id, userId: pid, kind: prod.kind });
+                        existingProducers.push({producerId: prod.id, userId: pid, kind: prod.kind});
                     }
                 }
 
@@ -717,7 +754,7 @@ wss.on("connection", (ws) => {
                     existingProducers,
                 });
 
-                broadcastRoom(conferenceId, userId, { type: "sfu:peer-joined", userId });
+                broadcastRoom(conferenceId, userId, {type: "sfu:peer-joined", userId});
             } catch (e) {
                 respondError(ws, requestId, e);
             }
@@ -728,7 +765,7 @@ wss.on("connection", (ws) => {
 
         // 2) create transport
         if (msg.type === "sfu:create-transport") { // ✅ CHANGED
-            const { requestId, userId, conferenceId } = msg;
+            const {requestId, userId, conferenceId} = msg;
             try {
                 const room = await getOrCreateRoom(conferenceId);
                 const peer = getPeer(room, userId);
@@ -738,7 +775,10 @@ wss.on("connection", (ws) => {
 
                 transport.on("dtlsstatechange", (state) => {
                     if (state === "closed") {
-                        try { transport.close(); } catch {}
+                        try {
+                            transport.close();
+                        } catch {
+                        }
                         peer.transports.delete(transport.id);
                     }
                 });
@@ -759,14 +799,14 @@ wss.on("connection", (ws) => {
 
         // 3) connect transport
         if (msg.type === "sfu:connect-transport") { // ✅ CHANGED
-            const { requestId, userId, conferenceId, transportId, dtlsParameters } = msg;
+            const {requestId, userId, conferenceId, transportId, dtlsParameters} = msg;
             try {
                 const room = rtcRooms.get(conferenceId);
                 const peer = room?.peers.get(userId);
                 const transport = peer?.transports.get(transportId);
                 if (!transport) throw new Error("transport not found");
 
-                await transport.connect({ dtlsParameters });
+                await transport.connect({dtlsParameters});
                 respond(ws, requestId, null);
             } catch (e) {
                 respondError(ws, requestId, e);
@@ -778,7 +818,7 @@ wss.on("connection", (ws) => {
 
         // 4) produce
         if (msg.type === "sfu:produce") { // ✅ CHANGED
-            const { requestId, userId, conferenceId, transportId, kind, rtpParameters, appData } = msg;
+            const {requestId, userId, conferenceId, transportId, kind, rtpParameters, appData} = msg;
             try {
                 const room = rtcRooms.get(conferenceId);
                 const peer = room?.peers.get(userId);
@@ -792,7 +832,7 @@ wss.on("connection", (ws) => {
                     }
                 }
 
-                const producer = await transport.produce({ kind, rtpParameters, appData });
+                const producer = await transport.produce({kind, rtpParameters, appData});
                 peer.producers.set(producer.id, producer);
 
                 producer.on("transportclose", () => peer.producers.delete(producer.id));
@@ -811,7 +851,7 @@ wss.on("connection", (ws) => {
                     await attachProducerToHls(conferenceId, room.router, producer, "audio").catch(err => console.error("HLS Audio attach failed:", err));
                 }
 
-                respond(ws, requestId, { id: producer.id }); // ✅ CHANGED
+                respond(ws, requestId, {id: producer.id}); // ✅ CHANGED
 
                 broadcastRoom(conferenceId, userId, {
                     type: "sfu:new-producer",
@@ -829,14 +869,14 @@ wss.on("connection", (ws) => {
 
         // 5) consume
         if (msg.type === "sfu:consume") { // ✅ CHANGED
-            const { requestId, userId, conferenceId, producerId, transportId, rtpCapabilities } = msg;
+            const {requestId, userId, conferenceId, producerId, transportId, rtpCapabilities} = msg;
             try {
                 const room = rtcRooms.get(conferenceId);
                 const peer = room?.peers.get(userId);
                 const transport = peer?.transports.get(transportId);
                 if (!room || !peer || !transport) throw new Error("room/peer/transport missing");
 
-                if (!room.router.canConsume({ producerId, rtpCapabilities })) {
+                if (!room.router.canConsume({producerId, rtpCapabilities})) {
                     throw new Error("cannot-consume");
                 }
 
@@ -851,7 +891,7 @@ wss.on("connection", (ws) => {
                 consumer.on("transportclose", () => peer.consumers.delete(consumer.id));
                 consumer.on("producerclose", () => {
                     peer.consumers.delete(consumer.id);
-                    safeSend(ws, { type: "sfu:producer-closed", producerId });
+                    safeSend(ws, {type: "sfu:producer-closed", producerId});
                 });
 
                 respond(ws, requestId, { // ✅ CHANGED: Client erwartet genau diese Felder
@@ -870,7 +910,7 @@ wss.on("connection", (ws) => {
 
         // 6) resume consumer
         if (msg.type === "sfu:resume-consumer") { // ✅ CHANGED
-            const { requestId, userId, conferenceId, consumerId } = msg;
+            const {requestId, userId, conferenceId, consumerId} = msg;
             try {
                 const room = rtcRooms.get(conferenceId);
                 const peer = room?.peers.get(userId);
@@ -889,7 +929,7 @@ wss.on("connection", (ws) => {
 
         // 7) leave explicit
         if (msg.type === "sfu:leave") { // ✅ CHANGED
-            const { requestId, userId, conferenceId } = msg;
+            const {requestId, userId, conferenceId} = msg;
             try {
                 await cleanupPeer(conferenceId, userId);
                 respond(ws, requestId, null);
