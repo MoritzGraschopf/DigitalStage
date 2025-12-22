@@ -242,7 +242,7 @@ async function createPlainOut(router, {ip, port, rtcpPort}) {
     const transport = await router.createPlainTransport({
         listenIp: {ip: "0.0.0.0", announcedIp: null},
         rtcpMux: false,
-        comedia: true,
+        comedia: false,
     });
 
     // Verbinde den PlainTransport mit FFmpeg
