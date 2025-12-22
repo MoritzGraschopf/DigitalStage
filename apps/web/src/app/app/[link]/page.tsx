@@ -423,7 +423,7 @@ function HLSViewer({
                     ref={screenVideoRef}
                     autoPlay
                     playsInline
-                    muted={false}
+                    muted
                     className="w-full h-full object-contain"
                 />
                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent px-4 py-3">
@@ -436,7 +436,7 @@ function HLSViewer({
                         ref={camVideoRef}
                         autoPlay
                         playsInline
-                        muted={false}
+                        muted
                         className="w-full h-full object-cover"
                     />
                     <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent px-2 py-2">
@@ -446,7 +446,7 @@ function HLSViewer({
             </div>
 
             {/* Audio-Stream (unsichtbar) */}
-            <audio ref={audioRef} autoPlay playsInline />
+            <audio ref={audioRef} autoPlay playsInline muted/>
         </div>
     );
 }
