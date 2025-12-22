@@ -65,6 +65,8 @@ services:
         - /opt/digitalstage/hls:/hls
         - /opt/digitalstage/sdp:/sdp
       entrypoint: [ "/bin/sh", "-c" ]
+      ports:
+        - "5004-5104:5004-5104/udp"
       command:
         - |
           set -e
