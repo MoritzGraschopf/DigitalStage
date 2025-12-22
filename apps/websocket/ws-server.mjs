@@ -532,8 +532,6 @@ async function attachProducerToHls(conferenceId, router, producer, tag) {
     if (consumer.kind === "video") {
         const pt = getVideoPt(consumer);
 
-        await consumer.requestKeyFrame();
-
         await waitForRtp(consumer);
 
         if (!ingest.started) {
@@ -545,6 +543,8 @@ async function attachProducerToHls(conferenceId, router, producer, tag) {
             ingest.started = true;
         }
 
+        await consumer.requestKeyFrame();
+        
         const iv = setInterval(() => {
             consumer.requestKeyFrame().catch(() => {});
         }, 2000);
