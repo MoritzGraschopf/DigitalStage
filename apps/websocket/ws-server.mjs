@@ -111,6 +111,22 @@ function broadcastRoom(confId, exceptUserId, payload) {
     }
 }
 
+async function waitForRtp(consumer, timeoutMs = 5000) {
+    const start = Date.now();
+
+    while (Date.now() - start < timeoutMs) {
+        const stats = await consumer.getStats();
+        for (const s of stats) {
+            if (s.type === "inbound-rtp" && s.packetsReceived > 0) {
+                return true;
+            }
+        }
+        await new Promise(r => setTimeout(r, 200));
+    }
+
+    throw new Error("No RTP packets received");
+}
+
 async function cleanupHls(confId) {
     const ingest = hlsIngest.get(confId);
     if (!ingest) return;
@@ -191,7 +207,13 @@ async function ensureDir(p) {
     await fs.promises.mkdir(p, {recursive: true});
 }
 
-function writeSdp(filePath, videoSizes = {cam: null, screen: null}) {
+function getVideoPt(consumer) {
+    return consumer.rtpParameters.codecs.find(
+        c => c.mimeType.toLowerCase() === "video/vp8"
+    )?.payloadType;
+}
+
+function writeSdp(filePath, videoSizes = {cam: null, screen: null}, videoPt) {
     // Standard-Video-Größe, falls nicht angegeben (1280x720)
     const camSize = videoSizes.cam || "1280x720";
     const screenSize = videoSizes.screen || "1920x1080";
@@ -207,9 +229,9 @@ o=- 0 0 IN IP4 127.0.0.1
 s=DigitalStage
 c=IN IP4 0.0.0.0
 t=0 0
-m=video 5004 RTP/AVP 96
-a=rtpmap:96 VP8/90000
-a=fmtp:96 max-fr=30;max-fs=${parseInt(camWidth) * parseInt(camHeight) / 256}
+m=video 5004 RTP/AVP ${videoPt}
+a=rtpmap:${videoPt} VP8/90000
+a=fmtp:${videoPt} max-fr=30;max-fs=${parseInt(camWidth) * parseInt(camHeight) / 256}
 a=recvonly
 m=video 5006 RTP/AVP 96
 a=rtpmap:96 VP8/90000
@@ -497,23 +519,10 @@ async function attachProducerToHls(conferenceId, router, producer, tag, userId) 
 async function attachProducerToHls(conferenceId, router, producer, tag) {
     const ingest = await initHlsForConference(conferenceId, router);
 
-    // alte Consumer sauber schließen (wichtig!)
+    // alte Consumer sauber schließen
     if (ingest.consumers[tag]) {
-        try {
-            ingest.consumers[tag].close();
-        } catch {
-        }
+        try { ingest.consumers[tag].close(); } catch {}
         ingest.consumers[tag] = null;
-    }
-
-    // bei erstem Video: SDP schreiben + FFmpeg starten
-    if (!ingest.started && producer.kind === "video") {
-        ingest.videoSizes[tag] =
-            tag === "screen" ? "1920x1080" : "1280x720";
-
-        writeSdp("/sdp/input.sdp", ingest.videoSizes);
-        startFfmpeg(conferenceId);
-        ingest.started = true;
     }
 
     const plainTransport = ingest.transports[tag];
@@ -524,11 +533,23 @@ async function attachProducerToHls(conferenceId, router, producer, tag) {
         paused: false,
     });
 
+    ingest.consumers[tag] = consumer;
+
     if (consumer.kind === "video") {
-        try {
-            await consumer.requestKeyFrame();
+        const pt = getVideoPt(consumer);
+
+        await consumer.requestKeyFrame();
+
+        await waitForRtp(consumer);
+
+        if (!ingest.started) {
+            ingest.videoSizes[tag] =
+                tag === "screen" ? "1920x1080" : "1280x720";
+
+            writeSdp("/sdp/input.sdp", ingest.videoSizes, pt);
+            startFfmpeg(conferenceId);
+            ingest.started = true;
         }
-        catch {}
 
         const iv = setInterval(() => {
             consumer.requestKeyFrame().catch(() => {});
@@ -538,10 +559,9 @@ async function attachProducerToHls(conferenceId, router, producer, tag) {
         consumer.on("producerclose", () => clearInterval(iv));
     }
 
-    console.log(`✅ RTP flowing to FFmpeg (${tag}) → consumer ${consumer.id}`);
-
-    ingest.consumers[tag] = consumer;
+    console.log(`✅ RTP + Keyframe confirmed (${tag}) → consumer ${consumer.id}`);
 }
+
 
 // ✅ CHANGED: Transport helper (ANNOUNCED_IP matcht .env)
 async function createWebRtcTransport(router) {
