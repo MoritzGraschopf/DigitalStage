@@ -295,8 +295,8 @@ function HLSViewer({
     //Für x-Konferenzen gehört das wieder geändert!!!
     //const camUrl = `${baseUrl}/hls/${conferenceId}/cam/index.m3u8`;
     const camUrl = `${baseUrl}/hls/testconf/outputstream.m3u8`;
-    const screenUrl = `${baseUrl}/hls/testconf/screen/index.m3u8`;
-    const audioUrl = `${baseUrl}/hls/testconf/audio/index.m3u8`;
+    //const screenUrl = `${baseUrl}/hls/testconf/screen/index.m3u8`;
+    //const audioUrl = `${baseUrl}/hls/testconf/audio/index.m3u8`;
 
     // WebSocket Event: server:use-hls (optional, für sofortige Benachrichtigung)
     useEffect(() => {
@@ -369,16 +369,20 @@ function HLSViewer({
             if (camVideoRef.current) {
                 loadStream(camVideoRef.current, camUrl);
             }
+
+            /*
             if (screenVideoRef.current) {
                 loadStream(screenVideoRef.current, screenUrl);
             }
             if (audioRef.current) {
                 loadStream(audioRef.current, audioUrl);
             }
+
+             */
         };
 
         loadHls()
-    }, [hasHls, camUrl, screenUrl, audioUrl]);
+    }, [hasHls, camUrl]);
 
     if (!hasHls) {
         return (
