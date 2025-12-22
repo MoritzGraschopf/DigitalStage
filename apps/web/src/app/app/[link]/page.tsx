@@ -294,7 +294,7 @@ function HLSViewer({
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
     //Für x-Konferenzen gehört das wieder geändert!!!
     //const camUrl = `${baseUrl}/hls/${conferenceId}/cam/index.m3u8`;
-    const camUrl = `${baseUrl}/hls/testconf/cam/index.m3u8`;
+    const camUrl = `${baseUrl}/hls/testconf/outputstream.m3u8`;
     const screenUrl = `${baseUrl}/hls/testconf/screen/index.m3u8`;
     const audioUrl = `${baseUrl}/hls/testconf/audio/index.m3u8`;
 
