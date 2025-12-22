@@ -613,6 +613,14 @@ export function useWebRTC(params: {
                         if (vTrack && device.canProduce("video")) {
                             await sendTransport.produce({ 
                                 track: vTrack,
+                                encodings: [{
+                                    maxBitrate: 1_500_000,
+                                    maxFramerate: 30,
+                                    scalabilityMode: "L1T1"
+                                }],
+                                codecOptions: {
+                                    videoGoogleStartBitrate: 1000
+                                },
                                 appData: { mediaTag: "cam" }
                             });
                         }
