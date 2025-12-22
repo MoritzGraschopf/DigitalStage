@@ -25,14 +25,12 @@ digitalstage.liveroom.at {
     # ==========================
     # 3) Hls: /hls/*
     # ==========================
-    @hls {
-         path /hls/*
-    }
 
-    handle @hls {
+    handle_path /hls/* {
         root * /srv/hls
+        header Cache-Control "no-cache"
         file_server
-    }
+      }
 
     # ==========================
     # 4) Default → Next.js App
