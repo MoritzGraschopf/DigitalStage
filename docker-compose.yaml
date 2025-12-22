@@ -73,8 +73,20 @@ services:
             sleep 1
           done
           
-          exec ffmpeg -hide_banner -loglevel info \
-            -protocol_whitelist file,udp,rtp -i /sdp/input.sdp -c:a aac -b:a 128k -ac 2 -f hls -hls_time 4 -hls_playlist_type event hls/testconf/outputstream.m3u8
+          exec ffmpeg -hide_banner -loglevel debug \
+            -protocol_whitelist file,udp,rtp \
+            -analyzeduration 10M \
+            -probesize 10M \
+            -fflags nobuffer \
+            -flags low_delay \
+            -i /sdp/input.sdp \
+            -map 0:v:0 \
+            -c:v libx264 -preset veryfast -tune zerolatency \
+            -f hls \
+            -hls_time 4 \
+            -hls_playlist_type event \
+            /hls/testconf/outputstream.m3u8
+
 volumes:
   db-data:
   registry-data:
