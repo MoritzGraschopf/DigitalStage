@@ -37,13 +37,15 @@ const mediaCodecs = [
         kind: "audio",
         mimeType: "audio/opus",
         clockRate: 48000,
-        channels: 2
+        channels: 2,
+        preferredPayloadType: 111
     },
     {
         kind: "video",
         mimeType: "video/VP8",
         clockRate: 90000,
-        parameters: {}
+        parameters: {},
+        preferredPayloadType: 96
     }
 ];
 
@@ -213,7 +215,7 @@ function getVideoPt(consumer) {
     )?.payloadType;
 }
 
-function writeSdp(filePath, videoSizes = {cam: null, screen: null}, videoPt) {
+function writeSdp(filePath, videoSizes = {cam: null, screen: null}, videoPt = 96) {
     // Standard-Video-Größe, falls nicht angegeben (1280x720)
     const camSize = videoSizes.cam || "1280x720";
     const screenSize = videoSizes.screen || "1920x1080";
@@ -230,8 +232,8 @@ s=DigitalStage
 c=IN IP4 0.0.0.0
 t=0 0
 
-m=video 5004 RTP/AVP 96
-a=rtpmap:96 VP8/90000
+m=video 5004 RTP/AVP ${videoPt}
+a=rtpmap:${videoPt} VP8/90000
 a=rtcp:5005
 a=recvonly
 `;
@@ -340,7 +342,7 @@ async function initHlsForConference(conferenceId, router) {
     let targetIp = process.env.FFMPEG_IP || "127.0.0.1";
 
     try {
-        const res = await dnsLookup(ffmpegHostname);
+        const res = await dns.promises.lookup(ffmpegHostname, {family: 4});
         targetIp = res.address;
         console.log(`✅ Resolved FFmpeg hostname '${ffmpegHostname}' to IP: ${targetIp}`);
     } catch {
