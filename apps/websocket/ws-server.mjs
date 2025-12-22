@@ -225,21 +225,12 @@ function writeSdp(filePath, videoSizes = {cam: null, screen: null}, videoPt) {
     // Für VP8 gibt es kein Standard-SDP-Attribut für Auflösung,
     // aber wir können sie in fmtp als Hinweis angeben
     const sdp = `v=0
-o=- 0 0 IN IP4 127.0.0.1
-s=DigitalStage
-c=IN IP4 0.0.0.0
 t=0 0
-m=video 5004 RTP/AVP ${videoPt}
-a=rtpmap:${videoPt} VP8/90000
-a=fmtp:${videoPt} max-fr=30;max-fs=${parseInt(camWidth) * parseInt(camHeight) / 256}
+m=audio 5006 RTP/AVP 98
+c=IN IP4 127.0.0.1
 a=recvonly
-m=video 5006 RTP/AVP 96
-a=rtpmap:96 VP8/90000
-a=fmtp:96 max-fr=30;max-fs=${parseInt(screenWidth) * parseInt(screenHeight) / 256}
-a=recvonly
-m=audio 5008 RTP/AVP 111
-a=rtpmap:111 opus/48000/2
-a=recvonly
+a=rtpmap:98 opus/48000/2
+a=fmtp:98 stereo=0; sprop-stereo=0; useinbandfec=1c
 `;
     fs.writeFileSync(filePath, sdp);
 }
