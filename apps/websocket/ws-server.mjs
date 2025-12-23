@@ -1,27 +1,16 @@
 import {WebSocketServer} from "ws";
 import http from "http";
 import fs from "fs";
-import path from "path";
 import dns from "dns";
-import {promisify} from "util";
-
-const dnsLookup = promisify(dns.lookup);
-
 import {createRequire} from "module";
 
 const require = createRequire(import.meta.url);
 const mediasoup = require("mediasoup");
-
 const wsServer = http.createServer();
 const wss = new WebSocketServer({server: wsServer});
-
 const inConference = new Map();
 const notInConference = new Map();
-
 const rtcRooms = new Map();
-
-// HLS Ingest State pro Conference
-// conferenceId -> HlsState
 const hlsIngest = new Map();
 
 const WS = {OPEN: 1};
@@ -113,22 +102,6 @@ function broadcastRoom(confId, exceptUserId, payload) {
     }
 }
 
-async function waitForRtp(consumer, timeoutMs = 5000) {
-    const start = Date.now();
-
-    while (Date.now() - start < timeoutMs) {
-        const stats = await consumer.getStats();
-        for (const s of stats) {
-            if (s.type === "inbound-rtp" && s.packetsReceived > 0) {
-                return true;
-            }
-        }
-        await new Promise(r => setTimeout(r, 200));
-    }
-
-    throw new Error("No RTP packets received");
-}
-
 async function cleanupHls(confId) {
     const ingest = hlsIngest.get(confId);
     if (!ingest) return;
@@ -216,16 +189,8 @@ function getVideoPt(consumer) {
 }
 
 function writeSdp(filePath, videoSizes = {cam: null, screen: null}, videoPt = 96) {
-    // Standard-Video-Größe, falls nicht angegeben (1280x720)
     const camSize = videoSizes.cam || "1280x720";
     const screenSize = videoSizes.screen || "1920x1080";
-
-    const [camWidth, camHeight] = camSize.split("x");
-    const [screenWidth, screenHeight] = screenSize.split("x");
-
-    // SDP mit korrekter Formatierung (keine führenden Leerzeichen)
-    // Für VP8 gibt es kein Standard-SDP-Attribut für Auflösung,
-    // aber wir können sie in fmtp als Hinweis angeben
     const sdp = `v=0
 o=- 0 0 IN IP4 127.0.0.1
 s=DigitalStage
@@ -256,78 +221,6 @@ async function createPlainOut(router, {ip, port, rtcpPort}) {
 
     return transport;
 }
-
-/*
-async function initHlsForConference(conferenceId, router) {
-    if (hlsIngest.has(conferenceId)) {
-        return hlsIngest.get(conferenceId);
-    }
-
-    // Verzeichnisse vorbereiten
-    await ensureDir(`/hls/testconf/cam`);
-    await ensureDir(`/hls/testconf/screen`);
-    await ensureDir(`/hls/testconf/audio`);
-
-    // FFmpeg IP auflösen
-    const ffmpegHostname = process.env.FFMPEG_HOST || "digitalstage_ffmpeg";
-    let targetIp = process.env.FFMPEG_IP || "127.0.0.1";
-
-    try {
-        const res = await dnsLookup(ffmpegHostname);
-        targetIp = res.address;
-        console.log(`✅ Resolved FFmpeg hostname '${ffmpegHostname}' to IP: ${targetIp}`);
-    } catch (err) {
-        console.log(`⚠️  Could not resolve '${ffmpegHostname}', using fallback IP: ${targetIp}`);
-    }
-
-    // Eigener Router für FFmpeg
-    const ffmpegRouter = await worker.createRouter({ mediaCodecs });
-
-    // PipeTransport zwischen Main-Router und FFmpeg-Router
-    const pipeTransport = await router.createPipeTransport({
-        listenIp: { ip: "127.0.0.1", announcedIp: null },
-        enableSctp: false,
-    });
-
-    const ffmpegPipeTransport = await ffmpegRouter.createPipeTransport({
-        listenIp: { ip: "127.0.0.1", announcedIp: null },
-        enableSctp: false,
-    });
-
-    await pipeTransport.connect({
-        ip: ffmpegPipeTransport.tuple.localIp,
-        port: ffmpegPipeTransport.tuple.localPort,
-    });
-
-    await ffmpegPipeTransport.connect({
-        ip: pipeTransport.tuple.localIp,
-        port: pipeTransport.tuple.localPort,
-    });
-
-    // PlainTransports → FFmpeg
-    const transports = {
-        cam: await createPlainOut(ffmpegRouter, { ip: targetIp, port: 5004, rtcpPort: 5005 }),
-        screen: await createPlainOut(ffmpegRouter, { ip: targetIp, port: 5006, rtcpPort: 5007 }),
-        audio: await createPlainOut(ffmpegRouter, { ip: targetIp, port: 5008, rtcpPort: 5009 }),
-    };
-
-    const state = {
-        initialized: true,
-        started: false,
-        router: ffmpegRouter,
-        pipeTransport,
-        ffmpegPipeTransport,
-        transports,
-        consumers: { cam: null, screen: null, audio: null },
-        videoSizes: { cam: null, screen: null },
-        activeAudioUserId: null,
-    };
-
-    hlsIngest.set(conferenceId, state);
-    return state;
-}
-
-*/
 
 async function initHlsForConference(conferenceId, router) {
     const existing = hlsIngest.get(conferenceId);
@@ -372,146 +265,6 @@ function startFfmpeg(conferenceId) {
     console.log("🚀 Starting FFmpeg for conference", conferenceId);
 }
 
-function sanitizeRtpParameters(rtpParameters) {
-    return {
-        codecs: rtpParameters.codecs.filter(c =>
-            c.mimeType.toLowerCase() === "video/vp8" ||
-            c.mimeType.toLowerCase() === "audio/opus"
-        ),
-        encodings: [
-            {
-                ssrc: rtpParameters.encodings[0].ssrc
-            }
-        ],
-        headerExtensions: [], // 🔥 WICHTIG
-        rtcp: {
-            cname: rtpParameters.rtcp?.cname,
-            reducedSize: true,
-            mux: false
-        }
-    };
-}
-
-/*
-async function attachProducerToHls(conferenceId, router, producer, tag, userId) {
-    const ingest = await initHlsForConference(conferenceId, router);
-
-    // Cleanup alter Consumer wenn bereits belegt
-    if (ingest.consumers[tag]) {
-        try {
-            const oldConsumer = ingest.consumers[tag];
-            if (oldConsumer?.consumer) oldConsumer.consumer.close();
-            if (oldConsumer?.tempTransport) oldConsumer.tempTransport.close();
-            if (oldConsumer?.pipeProducer) oldConsumer.pipeProducer.close();
-            if (oldConsumer?.pipeConsumer) oldConsumer.pipeConsumer.close();
-            if (oldConsumer?.plainProducer) oldConsumer.plainProducer.close();
-            if (oldConsumer?.ffmpegTempTransport) oldConsumer.ffmpegTempTransport.close();
-        } catch {
-            // Ignore cleanup errors
-        }
-        ingest.consumers[tag] = null;
-    }
-
-    // Nur EIN Video-Producer startet HLS
-    const isVideo = producer.kind === "video";
-
-    // Video-Größe festlegen (konservativ, stabil)
-    if (isVideo) {
-        ingest.videoSizes[tag] =
-            tag === "screen" ? "1920x1080" : "1280x720";
-
-        // SDP JETZT schreiben – mit echten Größen
-        writeSdp(`/sdp/input.sdp`, ingest.videoSizes);
-    }
-
-    // FFmpeg GENAU EINMAL starten
-    if (isVideo && !ingest.started) {
-        startFfmpeg(conferenceId);
-        ingest.started = true;
-    }
-
-    // --- Rest: Media weiterleiten ---
-    // (unverändert zu eurem bestehenden Pipe → Plain Flow)
-
-    const tempTransport = await router.createWebRtcTransport({
-        listenIps: [{ ip: "127.0.0.1", announcedIp: null }],
-        enableUdp: false,
-        enableTcp: true,
-    });
-
-    const consumer = await tempTransport.consume({
-        producerId: producer.id,
-        rtpCapabilities: router.rtpCapabilities,
-        paused: false,
-    });
-
-    // Consumer explizit starten (falls nötig)
-    if (consumer.paused) {
-        await consumer.resume();
-    }
-
-    const pipeProducer = await ingest.pipeTransport.produce({
-        kind: consumer.kind,
-        rtpParameters: consumer.rtpParameters,
-    });
-
-    const ffmpegTempTransport = await ingest.router.createWebRtcTransport({
-        listenIps: [{ ip: "127.0.0.1", announcedIp: null }],
-        enableUdp: false,
-        enableTcp: true,
-    });
-
-    const pipeConsumer = await ffmpegTempTransport.consume({
-        producerId: pipeProducer.id,
-        rtpCapabilities: ingest.router.rtpCapabilities,
-        paused: false,
-    });
-
-    // Consumer explizit starten (falls nötig)
-    if (pipeConsumer.paused) {
-        await pipeConsumer.resume();
-    }
-
-    const plainProducer = await ingest.transports[tag].produce({
-        kind: pipeConsumer.kind,
-        rtpParameters: sanitizeRtpParameters(pipeConsumer.rtpParameters),
-    });
-
-    // Event-Handler für Debugging
-    plainProducer.on("transportclose", () => {
-        console.log(`⚠️  PlainProducer transport closed for ${tag}`);
-    });
-
-    console.log(`✅ HLS Producer attached: ${tag} (${producer.kind}) -> FFmpeg`);
-    console.log(`   - PlainProducer ID: ${plainProducer.id}`);
-    console.log(`   - SSRC: ${sanitizeRtpParameters(pipeConsumer.rtpParameters).encodings[0]?.ssrc}`);
-
-    // Alle Objekte speichern für späteres Cleanup
-    ingest.consumers[tag] = {
-        consumer,
-        pipeProducer,
-        pipeConsumer,
-        plainProducer,
-        tempTransport,
-        ffmpegTempTransport,
-    };
-
-    // Event-Handler für automatisches Cleanup
-    consumer.on("transportclose", () => {
-        if (ingest.consumers[tag]) ingest.consumers[tag] = null;
-    });
-    producer.on("transportclose", () => {
-        if (ingest.consumers[tag]) ingest.consumers[tag] = null;
-    });
-
-    // Audio-Owner merken (für zukünftige Audio-Failover-Logik)
-    if (tag === "audio") {
-        ingest.activeAudioUserId = userId;
-    }
-}
-
-*/
-
 async function attachProducerToHls(conferenceId, router, producer, tag) {
     const ingest = await initHlsForConference(conferenceId, router);
 
@@ -533,8 +286,6 @@ async function attachProducerToHls(conferenceId, router, producer, tag) {
 
     if (consumer.kind === "video") {
         const pt = getVideoPt(consumer);
-
-        //await waitForRtp(consumer);
 
         if (!ingest.started) {
             ingest.videoSizes[tag] =
