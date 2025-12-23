@@ -114,6 +114,7 @@ export function useWebRTC(params: {
 
     const [localStream, setLocalStream] = useState<MediaStream | null>(null);
     const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
+    const [audioMuteStatus, setAudioMuteStatus] = useState<Record<string, boolean>>({});
 
     const initKeyRef = useRef<string | null>(null);
     const deviceRef = useRef<Device | null>(null);
@@ -241,6 +242,26 @@ export function useWebRTC(params: {
                         ...prev,
                         [fromUserId]: uiStream,
                     }));
+
+                    // Mikrofon-Status tracken für Audio-Tracks
+                    if (track.kind === "audio") {
+                        const updateMuteStatus = () => {
+                            setAudioMuteStatus((prev) => ({
+                                ...prev,
+                                [fromUserId]: track.muted || !track.enabled,
+                            }));
+                        };
+                        updateMuteStatus();
+                        track.onmute = updateMuteStatus;
+                        track.onunmute = updateMuteStatus;
+                        track.onended = () => {
+                            setAudioMuteStatus((prev) => {
+                                const next = { ...prev };
+                                delete next[fromUserId];
+                                return next;
+                            });
+                        };
+                    }
                 };
 
                 if (track.muted) {
@@ -406,6 +427,13 @@ export function useWebRTC(params: {
                     });
                     remoteStreamsRef.current.delete(m.userId);
                 }
+                
+                // Mikrofon-Status entfernen
+                setAudioMuteStatus((prev) => {
+                    const next = { ...prev };
+                    delete next[m.userId];
+                    return next;
+                });
 
                 setRemoteStreams((prev) => {
                     if (!prev[m.userId]) return prev;
@@ -693,6 +721,48 @@ export function useWebRTC(params: {
         };
     }, [userId, conferenceId, role, consume, request, processPendingNewProducers, iceServers]);
 
+    // Lokalen Mikrofon-Status tracken
+    useEffect(() => {
+        if (!localStream) {
+            setAudioMuteStatus((prev) => {
+                const next = { ...prev };
+                delete next[userId];
+                return next;
+            });
+            return;
+        }
+
+        const audioTracks = localStream.getAudioTracks();
+        if (audioTracks.length === 0) {
+            setAudioMuteStatus((prev) => {
+                const next = { ...prev };
+                delete next[userId];
+                return next;
+            });
+            return;
+        }
+
+        const updateLocalMuteStatus = () => {
+            const isMuted = audioTracks.every(track => track.muted || !track.enabled);
+            setAudioMuteStatus((prev) => ({
+                ...prev,
+                [userId]: isMuted,
+            }));
+        };
+
+        updateLocalMuteStatus();
+        audioTracks.forEach(track => {
+            track.onmute = updateLocalMuteStatus;
+            track.onunmute = updateLocalMuteStatus;
+        });
+
+        return () => {
+            audioTracks.forEach(track => {
+                track.onmute = null;
+                track.onunmute = null;
+            });
+        };
+    }, [localStream, userId]);
 
     return {
         localStream,
@@ -700,6 +770,7 @@ export function useWebRTC(params: {
         startScreenShare,
         stopScreenShare,
         isScreenSharing,
-        localScreenStream
+        localScreenStream,
+        audioMuteStatus
     };
 }
