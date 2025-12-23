@@ -927,7 +927,6 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                     const totalParticipants = participantCount + (hasLocal ? 1 : 0);
                                     const hasScreenShare = !!activeScreenShare || isScreenSharing;
 
-                                    // Layout mit Screenshare: Teilnehmer oben, Screenshare unten
                                     return (
                                         <>
                                             {/* Präsentator-Info */}
@@ -940,188 +939,219 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                                 </div>
                                             )}
 
-                                            {/* Teilnehmer-Videos oben in horizontaler Leiste */}
-                                            <div className={`flex-shrink-0 ${hasScreenShare ? 'h-32 sm:h-40' : 'flex-1 min-h-0'}`}>
-                                                {totalParticipants === 0 ? (
-                                                    <div className="h-full flex items-center justify-center">
-                                                        <div className="text-center text-muted-foreground">
-                                                            <div className="text-2xl mb-2">📹</div>
-                                                            <div className="text-sm">Warte auf Teilnehmer...</div>
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    <div className="h-full flex gap-2 sm:gap-3 overflow-x-auto pb-2">
-                                                        {hasLocal && (
-                                                            <div className="flex-shrink-0 w-48 sm:w-56 md:w-64">
-                                                                <VideoTile
-                                                                    stream={localStream}
-                                                                    title={isCurrentUserPresenter ? "Du (Präsentator)" : (derivedRole === "ORGANIZER" ? "Du (Organizer)" : derivedRole === "QUESTIONER" ? "Du (Fragesteller)" : "Du")}
-                                                                    mutedByDefault={true}
-                                                                    mirror={true}
-                                                                    isLocal={true}
-                                                                    className="w-full h-full object-cover"
-                                                                />
+                                            {hasScreenShare ? (
+                                                // Layout MIT Screenshare: Teilnehmer oben in kleiner Leiste, Screenshare groß unten
+                                                <>
+                                                    {/* Teilnehmer-Videos oben in horizontaler Leiste */}
+                                                    <div className="flex-shrink-0 h-32 sm:h-40">
+                                                        {totalParticipants === 0 ? (
+                                                            <div className="h-full flex items-center justify-center">
+                                                                <div className="text-center text-muted-foreground">
+                                                                    <div className="text-2xl mb-2">📹</div>
+                                                                    <div className="text-sm">Warte auf Teilnehmer...</div>
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="h-full flex gap-2 sm:gap-3 overflow-x-auto pb-2">
+                                                                {hasLocal && (
+                                                                    <div className="flex-shrink-0 w-48 sm:w-56 md:w-64">
+                                                                        <VideoTile
+                                                                            stream={localStream}
+                                                                            title={isCurrentUserPresenter ? "Du (Präsentator)" : (derivedRole === "ORGANIZER" ? "Du (Organizer)" : derivedRole === "QUESTIONER" ? "Du (Fragesteller)" : "Du")}
+                                                                            mutedByDefault={true}
+                                                                            mirror={true}
+                                                                            isLocal={true}
+                                                                            className="w-full h-full object-cover"
+                                                                        />
+                                                                    </div>
+                                                                )}
+                                                                {participantEntries.map(([peerId, stream]) => {
+                                                                    const peerUC = conference?.participants.find(p => p.userId === peerId);
+                                                                    const isPeerPresenter = peerUC?.isPresenter ?? false;
+                                                                    const isPeerQuestioner = (peerUC?.role as ExtendedRole | undefined) === "QUESTIONER";
+                                                                    let title = getUserName(peerId);
+                                                                    if (isPeerPresenter) title += " (Präsentator)";
+                                                                    if (isPeerQuestioner) title += " (Fragesteller)";
+                                                                    return (
+                                                                        <div key={peerId} className="flex-shrink-0 w-48 sm:w-56 md:w-64">
+                                                                            <VideoTile
+                                                                                stream={stream}
+                                                                                title={title}
+                                                                                mirror={false}
+                                                                                mutedByDefault={false}
+                                                                                isLocal={false}
+                                                                                className="w-full h-full object-cover"
+                                                                            />
+                                                                        </div>
+                                                                    );
+                                                                })}
                                                             </div>
                                                         )}
-                                                        {participantEntries.map(([peerId, stream]) => {
-                                                            const peerUC = conference?.participants.find(p => p.userId === peerId);
-                                                            const isPeerPresenter = peerUC?.isPresenter ?? false;
-                                                            const isPeerQuestioner = (peerUC?.role as ExtendedRole | undefined) === "QUESTIONER";
-                                                            let title = getUserName(peerId);
-                                                            if (isPeerPresenter) title += " (Präsentator)";
-                                                            if (isPeerQuestioner) title += " (Fragesteller)";
-                                                            return (
-                                                                <div key={peerId} className="flex-shrink-0 w-48 sm:w-56 md:w-64">
-                                                                    <VideoTile
-                                                                        stream={stream}
-                                                                        title={title}
-                                                                        mirror={false}
-                                                                        mutedByDefault={false}
-                                                                        isLocal={false}
-                                                                        className="w-full h-full object-cover"
-                                                                    />
-                                                                </div>
-                                                            );
-                                                        })}
                                                     </div>
-                                                )}
-                                            </div>
 
-                                            {/* Screenshare groß unten */}
-                                            {hasScreenShare && (
-                                                <div className="flex-1 min-h-0 relative rounded-xl overflow-hidden bg-black">
-                                                    {activeScreenShare ? (
-                                                        <VideoTile
-                                                            stream={activeScreenShare.stream}
-                                                            title={`${activeScreenShare.userName} teilt Bildschirm`}
-                                                            mirror={false}
-                                                            mutedByDefault={false}
-                                                            isLocal={false}
-                                                            className="w-full h-full object-contain"
-                                                        />
-                                                    ) : isScreenSharing && localScreenStream ? (
-                                                        <VideoTile
-                                                            stream={localScreenStream}
-                                                            title="Du teilst Bildschirm"
-                                                            mirror={false}
-                                                            mutedByDefault={true}
-                                                            isLocal={true}
-                                                            className="w-full h-full object-contain"
-                                                        />
-                                                    ) : null}
-                                                    
-                                                    {/* Screenshare-Controls */}
-                                                    {(derivedRole === "ORGANIZER" || derivedRole === "PARTICIPANT") && (
-                                                        <div className="absolute top-4 right-4 z-30">
+                                                    {/* Screenshare groß unten */}
+                                                    <div className="flex-1 min-h-0 relative rounded-xl overflow-hidden bg-black">
+                                                        {activeScreenShare ? (
+                                                            <VideoTile
+                                                                stream={activeScreenShare.stream}
+                                                                title={`${activeScreenShare.userName} teilt Bildschirm`}
+                                                                mirror={false}
+                                                                mutedByDefault={false}
+                                                                isLocal={false}
+                                                                className="w-full h-full object-contain"
+                                                            />
+                                                        ) : isScreenSharing && localScreenStream ? (
+                                                            <VideoTile
+                                                                stream={localScreenStream}
+                                                                title="Du teilst Bildschirm"
+                                                                mirror={false}
+                                                                mutedByDefault={true}
+                                                                isLocal={true}
+                                                                className="w-full h-full object-contain"
+                                                            />
+                                                        ) : null}
+                                                        
+                                                        {/* Screenshare-Controls */}
+                                                        {(derivedRole === "ORGANIZER" || derivedRole === "PARTICIPANT") && (
+                                                            <div className="absolute top-4 right-4 z-30">
+                                                                <Button
+                                                                    onClick={isScreenSharing ? stopScreenShare : startScreenShare}
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    className="shadow-lg backdrop-blur-sm bg-background/95 hover:bg-background"
+                                                                >
+                                                                    {isScreenSharing ? (
+                                                                        <>
+                                                                            <MonitorOff className="w-4 h-4 mr-2" />
+                                                                            <span className="hidden sm:inline">Teilen beenden</span>
+                                                                            <span className="sm:hidden">Beenden</span>
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            <Monitor className="w-4 h-4 mr-2" />
+                                                                            <span className="hidden sm:inline">Bildschirm teilen</span>
+                                                                            <span className="sm:hidden">Teilen</span>
+                                                                        </>
+                                                                    )}
+                                                                </Button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                // Layout OHNE Screenshare: Alle Teilnehmer in einem schönen Grid
+                                                <>
+                                                    {totalParticipants === 0 ? (
+                                                        <div className="flex-1 min-h-0 flex items-center justify-center">
+                                                            <div className="text-center text-muted-foreground">
+                                                                <div className="text-4xl mb-4">📹</div>
+                                                                <div className="text-lg font-medium mb-2">Warte auf Teilnehmer...</div>
+                                                                <div className="text-sm">Sobald andere Teilnehmer beitreten, werden sie hier angezeigt.</div>
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex-1 min-h-0">
+                                                            {totalParticipants === 1 ? (
+                                                                // Nur ein Teilnehmer (ich selbst) - groß anzeigen
+                                                                <div className="h-full flex items-center justify-center">
+                                                                    {hasLocal && (
+                                                                        <div className="w-full max-w-2xl">
+                                                                            <VideoTile
+                                                                                stream={localStream}
+                                                                                title={isCurrentUserPresenter ? "Du (Präsentator)" : (derivedRole === "ORGANIZER" ? "Du (Organizer)" : derivedRole === "QUESTIONER" ? "Du (Fragesteller)" : "Du")}
+                                                                                mutedByDefault={true}
+                                                                                mirror={true}
+                                                                                isLocal={true}
+                                                                                className="w-full h-full object-cover"
+                                                                            />
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            ) : totalParticipants <= 4 ? (
+                                                                // 2-4 Teilnehmer: 2-Spalten Grid
+                                                                <div className="h-full grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                                                                    {hasLocal && (
+                                                                        <VideoTile
+                                                                            stream={localStream}
+                                                                            title={isCurrentUserPresenter ? "Du (Präsentator)" : (derivedRole === "ORGANIZER" ? "Du (Organizer)" : derivedRole === "QUESTIONER" ? "Du (Fragesteller)" : "Du")}
+                                                                            mutedByDefault={true}
+                                                                            mirror={true}
+                                                                            isLocal={true}
+                                                                            className="w-full h-full object-cover"
+                                                                        />
+                                                                    )}
+                                                                    {participantEntries.map(([peerId, stream]) => {
+                                                                        const peerUC = conference?.participants.find(p => p.userId === peerId);
+                                                                        const isPeerPresenter = peerUC?.isPresenter ?? false;
+                                                                        const isPeerQuestioner = (peerUC?.role as ExtendedRole | undefined) === "QUESTIONER";
+                                                                        let title = getUserName(peerId);
+                                                                        if (isPeerPresenter) title += " (Präsentator)";
+                                                                        if (isPeerQuestioner) title += " (Fragesteller)";
+                                                                        return (
+                                                                            <VideoTile
+                                                                                key={peerId}
+                                                                                stream={stream}
+                                                                                title={title}
+                                                                                mirror={false}
+                                                                                mutedByDefault={false}
+                                                                                isLocal={false}
+                                                                                className="w-full h-full object-cover"
+                                                                            />
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            ) : (
+                                                                // Mehr als 4 Teilnehmer: 3-4 Spalten Grid
+                                                                <div className="h-full grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+                                                                    {hasLocal && (
+                                                                        <VideoTile
+                                                                            stream={localStream}
+                                                                            title={isCurrentUserPresenter ? "Du (Präsentator)" : (derivedRole === "ORGANIZER" ? "Du (Organizer)" : derivedRole === "QUESTIONER" ? "Du (Fragesteller)" : "Du")}
+                                                                            mutedByDefault={true}
+                                                                            mirror={true}
+                                                                            isLocal={true}
+                                                                            className="w-full aspect-video object-cover"
+                                                                        />
+                                                                    )}
+                                                                    {participantEntries.map(([peerId, stream]) => {
+                                                                        const peerUC = conference?.participants.find(p => p.userId === peerId);
+                                                                        const isPeerPresenter = peerUC?.isPresenter ?? false;
+                                                                        const isPeerQuestioner = (peerUC?.role as ExtendedRole | undefined) === "QUESTIONER";
+                                                                        let title = getUserName(peerId);
+                                                                        if (isPeerPresenter) title += " (Präsentator)";
+                                                                        if (isPeerQuestioner) title += " (Fragesteller)";
+                                                                        return (
+                                                                            <VideoTile
+                                                                                key={peerId}
+                                                                                stream={stream}
+                                                                                title={title}
+                                                                                mirror={false}
+                                                                                mutedByDefault={false}
+                                                                                isLocal={false}
+                                                                                className="w-full aspect-video object-cover"
+                                                                            />
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+
+                                                    {/* Screenshare-Button wenn kein Screenshare aktiv (nur für ORGANIZER und PARTICIPANT, nicht für QUESTIONER) */}
+                                                    {totalParticipants > 0 && (derivedRole === "ORGANIZER" || derivedRole === "PARTICIPANT") && (
+                                                        <div className="flex-shrink-0 flex justify-center pt-2">
                                                             <Button
-                                                                onClick={isScreenSharing ? stopScreenShare : startScreenShare}
+                                                                onClick={startScreenShare}
                                                                 variant="outline"
-                                                                size="sm"
-                                                                className="shadow-lg backdrop-blur-sm bg-background/95 hover:bg-background"
+                                                                size="lg"
+                                                                className="shadow-lg"
                                                             >
-                                                                {isScreenSharing ? (
-                                                                    <>
-                                                                        <MonitorOff className="w-4 h-4 mr-2" />
-                                                                        <span className="hidden sm:inline">Teilen beenden</span>
-                                                                        <span className="sm:hidden">Beenden</span>
-                                                                    </>
-                                                                ) : (
-                                                                    <>
-                                                                        <Monitor className="w-4 h-4 mr-2" />
-                                                                        <span className="hidden sm:inline">Bildschirm teilen</span>
-                                                                        <span className="sm:hidden">Teilen</span>
-                                                                    </>
-                                                                )}
+                                                                <Monitor className="w-5 h-5 mr-2" />
+                                                                Bildschirm teilen
                                                             </Button>
                                                         </div>
                                                     )}
-                                                </div>
-                                            )}
-
-                                            {/* Wenn kein Screenshare: Normales Layout */}
-                                            {!hasScreenShare && totalParticipants > 0 && (
-                                                <div className="flex-1 min-h-0">
-                                                    {totalParticipants <= 4 ? (
-                                                        <div className="h-full grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                                                            {hasLocal && (
-                                                                <VideoTile
-                                                                    stream={localStream}
-                                                                    title={isCurrentUserPresenter ? "Du (Präsentator)" : (derivedRole === "ORGANIZER" ? "Du (Organizer)" : derivedRole === "QUESTIONER" ? "Du (Fragesteller)" : "Du")}
-                                                                    mutedByDefault={true}
-                                                                    mirror={true}
-                                                                    isLocal={true}
-                                                                    className="w-full h-full object-cover"
-                                                                />
-                                                            )}
-                                                            {participantEntries.map(([peerId, stream]) => {
-                                                                const peerUC = conference?.participants.find(p => p.userId === peerId);
-                                                                const isPeerPresenter = peerUC?.isPresenter ?? false;
-                                                                const isPeerQuestioner = (peerUC?.role as ExtendedRole | undefined) === "QUESTIONER";
-                                                                let title = getUserName(peerId);
-                                                                if (isPeerPresenter) title += " (Präsentator)";
-                                                                if (isPeerQuestioner) title += " (Fragesteller)";
-                                                                return (
-                                                                    <VideoTile
-                                                                        key={peerId}
-                                                                        stream={stream}
-                                                                        title={title}
-                                                                        mirror={false}
-                                                                        mutedByDefault={false}
-                                                                        isLocal={false}
-                                                                        className="w-full h-full object-cover"
-                                                                    />
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    ) : (
-                                                        <div className="h-full grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-                                                            {hasLocal && (
-                                                                <VideoTile
-                                                                    stream={localStream}
-                                                                    title={isCurrentUserPresenter ? "Du (Präsentator)" : (derivedRole === "ORGANIZER" ? "Du (Organizer)" : derivedRole === "QUESTIONER" ? "Du (Fragesteller)" : "Du")}
-                                                                    mutedByDefault={true}
-                                                                    mirror={true}
-                                                                    isLocal={true}
-                                                                    className="w-full aspect-video object-cover"
-                                                                />
-                                                            )}
-                                                            {participantEntries.map(([peerId, stream]) => {
-                                                                const peerUC = conference?.participants.find(p => p.userId === peerId);
-                                                                const isPeerPresenter = peerUC?.isPresenter ?? false;
-                                                                const isPeerQuestioner = (peerUC?.role as ExtendedRole | undefined) === "QUESTIONER";
-                                                                let title = getUserName(peerId);
-                                                                if (isPeerPresenter) title += " (Präsentator)";
-                                                                if (isPeerQuestioner) title += " (Fragesteller)";
-                                                                return (
-                                                                    <VideoTile
-                                                                        key={peerId}
-                                                                        stream={stream}
-                                                                        title={title}
-                                                                        mirror={false}
-                                                                        mutedByDefault={false}
-                                                                        isLocal={false}
-                                                                        className="w-full aspect-video object-cover"
-                                                                    />
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-
-                                            {/* Screenshare-Button wenn kein Screenshare aktiv (nur für ORGANIZER und PARTICIPANT, nicht für QUESTIONER) */}
-                                            {!hasScreenShare && (derivedRole === "ORGANIZER" || derivedRole === "PARTICIPANT") && (
-                                                <div className="flex-shrink-0 flex justify-center">
-                                                    <Button
-                                                        onClick={startScreenShare}
-                                                        variant="outline"
-                                                        size="lg"
-                                                        className="shadow-lg"
-                                                    >
-                                                        <Monitor className="w-5 h-5 mr-2" />
-                                                        Bildschirm teilen
-                                                    </Button>
-                                                </div>
+                                                </>
                                             )}
                                         </>
                                     );
