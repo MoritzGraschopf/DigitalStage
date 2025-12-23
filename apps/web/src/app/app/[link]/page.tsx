@@ -13,7 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Check, Copy, Info, LoaderCircle, MessageCircle, X, Monitor, MonitorOff, Crown, Mic, MicOff } from "lucide-react";
+import { ArrowLeft, Check, Copy, Info, LoaderCircle, MessageCircle, X, Monitor, MonitorOff, Crown, Mic, MicOff, Users } from "lucide-react";
 import ConferenceChat from "@/components/ConferenceChat";
 import type HlsType from "hls.js";
 
@@ -746,7 +746,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
     const rtcReady = !!user?.id && !!conference?.id;
 
     // --- WebRTC mit DB-basierter Rolle ---
-    const { localStream, remoteStreams, startScreenShare, stopScreenShare, isScreenSharing, localScreenStream } = useWebRTC({
+    const { localStream, remoteStreams, startScreenShare, stopScreenShare, isScreenSharing, localScreenStream, audioMuteStatus } = useWebRTC({
         socket,
         send,
         userId: rtcReady ? user.id : "",
@@ -809,6 +809,54 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
         return null;
     }, [screenShareStreams, getUserName]);
 
+    // Liste aller WebRTC-Teilnehmer mit Status
+    const webrtcParticipants = useMemo(() => {
+        const participants: Array<{
+            userId: string;
+            name: string;
+            role: ExtendedRole;
+            isPresenter: boolean;
+            isQuestioner: boolean;
+            isMuted: boolean;
+            isLocal: boolean;
+        }> = [];
+
+        // Lokaler Teilnehmer
+        if (localStream && user) {
+            const uc = conference?.participants.find(p => p.userId === user.id);
+            const role = uc?.role as ExtendedRole | undefined;
+            participants.push({
+                userId: user.id,
+                name: `${user.firstName}${user.lastName ? ` ${user.lastName}` : ""}`,
+                role: derivedRole,
+                isPresenter: uc?.isPresenter ?? false,
+                isQuestioner: role === "QUESTIONER",
+                isMuted: audioMuteStatus[user.id] ?? true,
+                isLocal: true,
+            });
+        }
+
+        // Remote-Teilnehmer
+        Object.keys(participantStreams).forEach(userId => {
+            const uc = conference?.participants.find(p => p.userId === userId);
+            const role = uc?.role as ExtendedRole | undefined;
+            const user = allUsers.find(u => u.id === userId);
+            if (user) {
+                participants.push({
+                    userId,
+                    name: `${user.firstName}${user.lastName ? ` ${user.lastName}` : ""}`,
+                    role: role ?? "PARTICIPANT",
+                    isPresenter: uc?.isPresenter ?? false,
+                    isQuestioner: role === "QUESTIONER",
+                    isMuted: audioMuteStatus[userId] ?? true,
+                    isLocal: false,
+                });
+            }
+        });
+
+        return participants;
+    }, [localStream, user, conference, allUsers, derivedRole, participantStreams, audioMuteStatus]);
+
     if (!conference) {
         return (
             <div className="h-screen w-screen fixed top-0 left-0 z-[-1] flex justify-center items-center flex-col gap-2">
@@ -832,6 +880,82 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                             <span>Verlassen</span>
                         </Link>
                     </Button>
+                    {/* Teilnehmerübersicht - Mobile */}
+                    <Sheet>
+                        <SheetTrigger asChild>
+                            <Button size="sm" variant="outline">
+                                <Users className="w-4 h-4 mr-1" />
+                                <span className="hidden sm:inline">Teilnehmer ({webrtcParticipants.length})</span>
+                                <span className="sm:hidden">{webrtcParticipants.length}</span>
+                            </Button>
+                        </SheetTrigger>
+                        <SheetContent side="right" className="w-full sm:w-96">
+                            <SheetHeader>
+                                <SheetTitle>Teilnehmerübersicht</SheetTitle>
+                                <SheetDescription>
+                                    Alle aktiven WebRTC-Verbindungen in dieser Konferenz
+                                </SheetDescription>
+                            </SheetHeader>
+                            <div className="mt-6 space-y-3">
+                                {webrtcParticipants.length === 0 ? (
+                                    <div className="text-center text-muted-foreground py-8">
+                                        <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                                        <p>Keine aktiven Teilnehmer</p>
+                                    </div>
+                                ) : (
+                                    webrtcParticipants.map((participant) => {
+                                        const roleLabel = participant.isPresenter 
+                                            ? "Präsentator" 
+                                            : participant.isQuestioner 
+                                            ? "Fragesteller" 
+                                            : participant.role === "ORGANIZER"
+                                            ? "Organizer"
+                                            : "Teilnehmer";
+                                        
+                                        return (
+                                            <div 
+                                                key={participant.userId}
+                                                className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                                            >
+                                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                                    <div className="flex-shrink-0">
+                                                        {participant.isPresenter ? (
+                                                            <Crown className="w-5 h-5 text-yellow-500" />
+                                                        ) : participant.isQuestioner ? (
+                                                            <Mic className="w-5 h-5 text-blue-500" />
+                                                        ) : participant.role === "ORGANIZER" ? (
+                                                            <Crown className="w-5 h-5 text-purple-500" />
+                                                        ) : (
+                                                            <div className="w-5 h-5 rounded-full bg-muted" />
+                                                        )}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-medium truncate">
+                                                                {participant.name}
+                                                                {participant.isLocal && " (Du)"}
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-xs text-muted-foreground mt-0.5">
+                                                            {roleLabel}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex-shrink-0 ml-2">
+                                                    {participant.isMuted ? (
+                                                        <MicOff className="w-5 h-5 text-muted-foreground" />
+                                                    ) : (
+                                                        <Mic className="w-5 h-5 text-green-500" />
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
+                        </SheetContent>
+                    </Sheet>
+
                     {derivedRole === "ORGANIZER" && (
                         <Button 
                             disabled={conference.status === "ENDED"} 
@@ -839,7 +963,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                             size="sm"
                             variant="outline"
                         >
-                            Teilnehmer hinzufügen
+                            Teilnehmer verwalten
                         </Button>
                     )}
                 </div>
@@ -1170,6 +1294,84 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                         </Link>
                     </Button>
                     
+                    {/* Teilnehmerübersicht - für alle sichtbar */}
+                    <Sheet>
+                        <SheetTrigger asChild>
+                            <Button 
+                                variant="outline" 
+                                className="shadow-lg backdrop-blur-sm bg-background/95 hover:bg-background border-2"
+                            >
+                                <Users className="w-4 h-4 mr-2" />
+                                Teilnehmer ({webrtcParticipants.length})
+                            </Button>
+                        </SheetTrigger>
+                        <SheetContent side="right" className="w-full sm:w-96">
+                            <SheetHeader>
+                                <SheetTitle>Teilnehmerübersicht</SheetTitle>
+                                <SheetDescription>
+                                    Alle aktiven WebRTC-Verbindungen in dieser Konferenz
+                                </SheetDescription>
+                            </SheetHeader>
+                            <div className="mt-6 space-y-3">
+                                {webrtcParticipants.length === 0 ? (
+                                    <div className="text-center text-muted-foreground py-8">
+                                        <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                                        <p>Keine aktiven Teilnehmer</p>
+                                    </div>
+                                ) : (
+                                    webrtcParticipants.map((participant) => {
+                                        const roleLabel = participant.isPresenter 
+                                            ? "Präsentator" 
+                                            : participant.isQuestioner 
+                                            ? "Fragesteller" 
+                                            : participant.role === "ORGANIZER"
+                                            ? "Organizer"
+                                            : "Teilnehmer";
+                                        
+                                        return (
+                                            <div 
+                                                key={participant.userId}
+                                                className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                                            >
+                                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                                    <div className="flex-shrink-0">
+                                                        {participant.isPresenter ? (
+                                                            <Crown className="w-5 h-5 text-yellow-500" />
+                                                        ) : participant.isQuestioner ? (
+                                                            <Mic className="w-5 h-5 text-blue-500" />
+                                                        ) : participant.role === "ORGANIZER" ? (
+                                                            <Crown className="w-5 h-5 text-purple-500" />
+                                                        ) : (
+                                                            <div className="w-5 h-5 rounded-full bg-muted" />
+                                                        )}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-medium truncate">
+                                                                {participant.name}
+                                                                {participant.isLocal && " (Du)"}
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-xs text-muted-foreground mt-0.5">
+                                                            {roleLabel}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex-shrink-0 ml-2">
+                                                    {participant.isMuted ? (
+                                                        <MicOff className="w-5 h-5 text-muted-foreground" />
+                                                    ) : (
+                                                        <Mic className="w-5 h-5 text-green-500" />
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
+                        </SheetContent>
+                    </Sheet>
+
                     {derivedRole === "ORGANIZER" && (
                         <>
                             <Button 
@@ -1177,175 +1379,229 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                 onClick={() => setCommandOpen(true)}
                                 className="shadow-lg backdrop-blur-sm"
                             >
-                                Teilnehmer hinzufügen
+                                Teilnehmer verwalten
                             </Button>
                             <CommandDialog open={commandOpen} onOpenChange={(o) => { setCommandOpen(o); if (!o) setSelectedUserIds([]); }}>
-                                <div className="m-4 space-y-2">
-                                    <h1 className="text-lg font-semibold">Teilnehmer auswählen</h1>
-                                    <h3 className="text-sm text-muted-foreground">
-                                        {remainingSlots > 0 ? `Du kannst noch ${remainingSlots - selectedUserIds.length} von ${remainingSlots} möglichen hinzufügen.` : "Maximale Teilnehmeranzahl erreicht."}
-                                    </h3>
+                                <div className="flex flex-col h-[600px]">
+                                    <div className="p-4 border-b space-y-2">
+                                        <h1 className="text-xl font-semibold">Teilnehmer verwalten</h1>
+                                        <p className="text-sm text-muted-foreground">
+                                            {remainingSlots > 0 ? `Du kannst noch ${remainingSlots - selectedUserIds.length} von ${remainingSlots} möglichen hinzufügen.` : "Maximale Teilnehmeranzahl erreicht."}
+                                        </p>
+                                    </div>
 
-                                    {/* Aktueller Präsentator */}
-                                    {currentPresenter && (
-                                        <div className="pt-2">
-                                            <div className="mb-1 text-xs font-medium text-muted-foreground">Präsentator</div>
-                                            <div className="flex items-center gap-2">
-                                                <Badge variant="default" className="flex items-center gap-1">
-                                                    <Crown className="w-3 h-3" />
-                                                    <span>{currentPresenter.firstName} {currentPresenter.lastName ?? ""}</span>
-                                                </Badge>
-                                                <Button
-                                                    size="sm"
-                                                    variant="ghost"
-                                                    onClick={() => handleSetPresenter(null)}
-                                                    className="h-6 text-xs"
-                                                >
-                                                    Entfernen
-                                                </Button>
+                                    <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                                        {/* Aktueller Präsentator */}
+                                        {currentPresenter && (
+                                            <div className="space-y-2">
+                                                <div className="flex items-center gap-2 text-sm font-medium">
+                                                    <Crown className="w-4 h-4 text-yellow-500" />
+                                                    <span>Präsentator</span>
+                                                </div>
+                                                <div className="p-3 rounded-lg border bg-card flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <Crown className="w-4 h-4 text-yellow-500" />
+                                                        <span className="font-medium">{currentPresenter.firstName} {currentPresenter.lastName ?? ""}</span>
+                                                    </div>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        onClick={() => handleSetPresenter(null)}
+                                                        className="text-xs"
+                                                    >
+                                                        Entfernen
+                                                    </Button>
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
+                                        )}
 
-                                    {currentParticipants.length > 0 && (
-                                        <div className="pt-2">
-                                            <div className="mb-1 text-xs font-medium text-muted-foreground">Aktuelle Teilnehmer</div>
-                                            <div className="flex flex-wrap gap-1">
-                                                {currentParticipants.map((u) => {
-                                                    const uc = conference?.participants.find(p => p.userId === u.id);
-                                                    const role = uc?.role as ExtendedRole | undefined;
-                                                    const isQuestioner = role === "QUESTIONER";
-                                                    const isPresenter = uc?.isPresenter ?? false;
-                                                    return (
-                                                        <div key={u.id} className="flex items-center gap-1">
-                                                            <Badge 
-                                                                variant={isQuestioner ? "secondary" : isPresenter ? "default" : "outline"} 
-                                                                className="flex items-center gap-1 pr-1"
-                                                            >
-                                                                {isPresenter && <Crown className="w-3 h-3" />}
-                                                                {isQuestioner && <Mic className="w-3 h-3" />}
-                                                                <span>{u.firstName} {u.lastName ?? ""}</span>
-                                                                {isQuestioner && <span className="text-xs">(Fragesteller)</span>}
-                                                            </Badge>
-                                                            <div className="flex gap-0.5">
-                                                                {!isPresenter && (
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="ghost"
-                                                                        onClick={() => handleSetPresenter(u.id)}
-                                                                        className="h-6 px-1.5 text-xs"
-                                                                        title="Als Präsentator setzen"
-                                                                    >
-                                                                        <Crown className="w-3 h-3" />
-                                                                    </Button>
-                                                                )}
-                                                                {isQuestioner && (
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="ghost"
-                                                                        onClick={() => handleDeactivateQuestioner(u.id)}
-                                                                        className="h-6 px-1.5 text-xs"
-                                                                        title="Fragesteller deaktivieren"
-                                                                    >
-                                                                        <MicOff className="w-3 h-3" />
-                                                                    </Button>
-                                                                )}
-                                                                {!isPresenter && (
-                                                                    <button
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            handleRemoveParticipant(u.id);
-                                                                        }}
-                                                                        className="hover:bg-destructive/20 rounded-full p-0.5 transition-colors"
-                                                                        title="Teilnehmer entfernen"
-                                                                    >
-                                                                        <X className="w-3 h-3" />
-                                                                    </button>
-                                                                )}
+                                        {/* Aktuelle Teilnehmer */}
+                                        {currentParticipants.length > 0 && (
+                                            <div className="space-y-2">
+                                                <div className="text-sm font-medium">Aktuelle Teilnehmer ({currentParticipants.length})</div>
+                                                <div className="space-y-2">
+                                                    {currentParticipants.map((u) => {
+                                                        const uc = conference?.participants.find(p => p.userId === u.id);
+                                                        const role = uc?.role as ExtendedRole | undefined;
+                                                        const isQuestioner = role === "QUESTIONER";
+                                                        const isPresenter = uc?.isPresenter ?? false;
+                                                        return (
+                                                            <div key={u.id} className="p-3 rounded-lg border bg-card flex items-center justify-between hover:bg-accent/50 transition-colors">
+                                                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                                                    {isPresenter ? (
+                                                                        <Crown className="w-4 h-4 text-yellow-500 flex-shrink-0" />
+                                                                    ) : isQuestioner ? (
+                                                                        <Mic className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                                                                    ) : (
+                                                                        <div className="w-4 h-4 rounded-full bg-muted flex-shrink-0" />
+                                                                    )}
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <div className="font-medium truncate">{u.firstName} {u.lastName ?? ""}</div>
+                                                                        <div className="text-xs text-muted-foreground">
+                                                                            {isPresenter ? "Präsentator" : isQuestioner ? "Fragesteller" : "Teilnehmer"}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex items-center gap-1 flex-shrink-0">
+                                                                    {!isPresenter && (
+                                                                        <Tooltip>
+                                                                            <TooltipTrigger asChild>
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    variant="ghost"
+                                                                                    onClick={() => handleSetPresenter(u.id)}
+                                                                                    className="h-8 w-8 p-0"
+                                                                                >
+                                                                                    <Crown className="w-4 h-4" />
+                                                                                </Button>
+                                                                            </TooltipTrigger>
+                                                                            <TooltipContent>Als Präsentator setzen</TooltipContent>
+                                                                        </Tooltip>
+                                                                    )}
+                                                                    {!isQuestioner && !isPresenter && (
+                                                                        <Tooltip>
+                                                                            <TooltipTrigger asChild>
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    variant="ghost"
+                                                                                    onClick={() => handleActivateQuestioner(u.id)}
+                                                                                    className="h-8 w-8 p-0"
+                                                                                >
+                                                                                    <Mic className="w-4 h-4" />
+                                                                                </Button>
+                                                                            </TooltipTrigger>
+                                                                            <TooltipContent>Als Fragesteller aktivieren</TooltipContent>
+                                                                        </Tooltip>
+                                                                    )}
+                                                                    {isQuestioner && (
+                                                                        <Tooltip>
+                                                                            <TooltipTrigger asChild>
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    variant="ghost"
+                                                                                    onClick={() => handleDeactivateQuestioner(u.id)}
+                                                                                    className="h-8 w-8 p-0"
+                                                                                >
+                                                                                    <MicOff className="w-4 h-4" />
+                                                                                </Button>
+                                                                            </TooltipTrigger>
+                                                                            <TooltipContent>Fragesteller deaktivieren</TooltipContent>
+                                                                        </Tooltip>
+                                                                    )}
+                                                                    {!isPresenter && (
+                                                                        <Tooltip>
+                                                                            <TooltipTrigger asChild>
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    variant="ghost"
+                                                                                    onClick={() => handleRemoveParticipant(u.id)}
+                                                                                    className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                                                                >
+                                                                                    <X className="w-4 h-4" />
+                                                                                </Button>
+                                                                            </TooltipTrigger>
+                                                                            <TooltipContent>Teilnehmer entfernen</TooltipContent>
+                                                                        </Tooltip>
+                                                                    )}
+                                                                </div>
                                                             </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Zuschauer */}
+                                        {currentViewers.length > 0 && (
+                                            <div className="space-y-2">
+                                                <div className="text-sm font-medium">Zuschauer ({currentViewers.length})</div>
+                                                <div className="space-y-2">
+                                                    {currentViewers.map((u) => (
+                                                        <div key={u.id} className="p-3 rounded-lg border bg-card flex items-center justify-between hover:bg-accent/50 transition-colors">
+                                                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                                                                <div className="w-4 h-4 rounded-full bg-muted flex-shrink-0" />
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="font-medium truncate">{u.firstName} {u.lastName ?? ""}</div>
+                                                                    <div className="text-xs text-muted-foreground">Zuschauer</div>
+                                                                </div>
+                                                            </div>
+                                                            <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="ghost"
+                                                                        onClick={() => handleActivateQuestioner(u.id)}
+                                                                        className="h-8 w-8 p-0"
+                                                                    >
+                                                                        <Mic className="w-4 h-4" />
+                                                                    </Button>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent>Als Fragesteller aktivieren</TooltipContent>
+                                                            </Tooltip>
                                                         </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Wird hinzugefügt */}
+                                        {selectedUserIds.length > 0 && (
+                                            <div className="space-y-2">
+                                                <div className="text-sm font-medium">Wird hinzugefügt ({selectedUserIds.length})</div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {allUsers.filter((u) => selectedUserIds.includes(u.id)).map((u) => (
+                                                        <Badge key={u.id} variant="secondary" className="cursor-pointer hover:bg-secondary/80" onClick={() => toggleUser(u.id)}>
+                                                            {u.firstName} {u.lastName ?? ""}
+                                                            <X className="w-3 h-3 ml-1" />
+                                                        </Badge>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <Separator className="my-4" />
+
+                                    {/* User-Suche */}
+                                    <div className="space-y-2">
+                                        <div className="text-sm font-medium">Neue Teilnehmer hinzufügen</div>
+                                        <CommandInput placeholder="User suchen..." />
+                                        <CommandList className="max-h-[200px]">
+                                            <CommandEmpty>Keine User gefunden.</CommandEmpty>
+                                            <CommandGroup heading="Verfügbare User">
+                                                {visibleUsers.map((u) => {
+                                                    const already = currentParticipants.some((p) => p.id === u.id);
+                                                    const checked = selectedUserIds.includes(u.id);
+                                                    return (
+                                                        <CommandItem
+                                                            key={u.id}
+                                                            onMouseDown={(e) => e.preventDefault()}
+                                                            onSelect={() => !already && toggleUser(u.id)}
+                                                            className="flex items-center gap-2"
+                                                        >
+                                                            <div onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.preventDefault()}>
+                                                                <Checkbox
+                                                                    checked={checked || already}
+                                                                    disabled={already || (!checked && (remainingSlots <= 0 || atLimit))}
+                                                                    onCheckedChange={() => toggleUser(u.id)}
+                                                                    className="flex justify-center items-center"
+                                                                />
+                                                            </div>
+                                                            <span className="truncate">{u.firstName} {u.lastName ?? ""}</span>
+                                                            {already && <span className="ml-auto text-xs text-muted-foreground">(bereits Teilnehmer)</span>}
+                                                        </CommandItem>
                                                     );
                                                 })}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Zuschauer */}
-                                    {currentViewers.length > 0 && (
-                                        <div className="pt-2">
-                                            <div className="mb-1 text-xs font-medium text-muted-foreground">Zuschauer</div>
-                                            <div className="flex flex-wrap gap-1">
-                                                {currentViewers.map((u) => (
-                                                    <Badge 
-                                                        key={u.id} 
-                                                        variant="outline" 
-                                                        className="flex items-center gap-1"
-                                                    >
-                                                        <span>{u.firstName} {u.lastName ?? ""}</span>
-                                                        <Button
-                                                            size="sm"
-                                                            variant="ghost"
-                                                            onClick={() => handleActivateQuestioner(u.id)}
-                                                            className="h-5 px-1.5 text-xs ml-1"
-                                                            title="Als Fragesteller aktivieren"
-                                                        >
-                                                            <Mic className="w-3 h-3" />
-                                                        </Button>
-                                                    </Badge>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {selectedUserIds.length > 0 && (
-                                        <div className="pt-2">
-                                            <div className="mb-1 text-xs font-medium text-muted-foreground">Wird hinzugefügt</div>
-                                            <div className="flex flex-wrap gap-1">
-                                                {allUsers.filter((u) => selectedUserIds.includes(u.id)).map((u) => (
-                                                    <Badge key={u.id} variant="secondary" className="cursor-pointer" onClick={() => toggleUser(u.id)}>
-                                                        {u.firstName} {u.lastName ?? ""}
-                                                    </Badge>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </div>
                                 </div>
 
-                                <Separator />
-
-                                <CommandInput placeholder="User suchen..." />
-                                <CommandList>
-                                    <CommandEmpty>Keine User gefunden.</CommandEmpty>
-                                    <CommandGroup heading="Users">
-                                        {visibleUsers.map((u) => {
-                                            const already = currentParticipants.some((p) => p.id === u.id);
-                                            const checked = selectedUserIds.includes(u.id);
-                                            return (
-                                                <CommandItem
-                                                    key={u.id}
-                                                    onMouseDown={(e) => e.preventDefault()}
-                                                    onSelect={() => !already && toggleUser(u.id)}
-                                                    className="flex items-center gap-2"
-                                                >
-                                                    <div onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.preventDefault()}>
-                                                        <Checkbox
-                                                            checked={checked || already}
-                                                            disabled={already || (!checked && (remainingSlots <= 0 || atLimit))}
-                                                            onCheckedChange={() => toggleUser(u.id)}
-                                                            className="flex justify-center items-center"
-                                                        />
-                                                    </div>
-                                                    <span className="truncate">{u.firstName} {u.lastName ?? ""}</span>
-                                                    {already && <span className="ml-auto text-xs text-muted-foreground">(bereits drin)</span>}
-                                                </CommandItem>
-                                            );
-                                        })}
-                                    </CommandGroup>
-                                </CommandList>
-
-                                <div className="m-4 flex justify-end gap-2">
+                                <div className="p-4 border-t flex justify-end gap-2">
                                     <Button variant="ghost" onClick={() => setCommandOpen(false)}>Abbrechen</Button>
-                                    <Button onClick={handleInviteSubmit} disabled={selectedUserIds.length === 0 || remainingSlots <= 0}>Hinzufügen</Button>
+                                    <Button onClick={handleInviteSubmit} disabled={selectedUserIds.length === 0 || remainingSlots <= 0}>
+                                        {selectedUserIds.length > 0 ? `${selectedUserIds.length} hinzufügen` : "Hinzufügen"}
+                                    </Button>
                                 </div>
                             </CommandDialog>
                         </>
