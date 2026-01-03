@@ -502,9 +502,9 @@ wss.on("connection", (ws) => {
         }
 
         if (msg.type === "conference") {
+            // Sende an alle Clients, damit sie die Konferenzliste aktualisieren können
             for (const client of wss.clients) {
                 if (client.readyState !== WS.OPEN) continue;
-                if (client.conferenceId !== msg.id) continue;
                 safeSend(client, {
                     type: "server:conference",
                     id: msg.id,
