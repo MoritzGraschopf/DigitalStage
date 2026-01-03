@@ -65,14 +65,33 @@ export default function Home() {
     };
 
     // Rollenbasierte Zuordnung für Abschnitte
-    const { mine, participating, watching } = useMemo(() => {
+    const { mine, participating, watching, ended } = useMemo(() => {
+        // Prüft ob eine Konferenz beendet ist (durch Status oder Datum)
+        const isConferenceEnded = (conference: ConferenceWithParticipants): boolean => {
+            if (conference.status === "ENDED") return true;
+            if (conference.endDate) {
+                const endDate = new Date(conference.endDate);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                endDate.setHours(0, 0, 0, 0);
+                return endDate < today;
+            }
+            return false;
+        };
+
         const mine: ConferenceWithParticipants[] = [];
         const participating: ConferenceWithParticipants[] = [];
         const watching: ConferenceWithParticipants[] = [];
+        const ended: ConferenceWithParticipants[] = [];
         const uid = user?.id;
 
         for (const c of conferences) {
-            if (c.status === "ENDED") continue;
+            // Beendete Konferenzen in separaten Array
+            if (isConferenceEnded(c)) {
+                ended.push(c);
+                continue;
+            }
+
             const parts = c.participants ?? [];
             const isOrganizer =
                 (c.organizerId && uid && c.organizerId === uid) ||
@@ -83,9 +102,9 @@ export default function Home() {
             if (isOrganizer) mine.push(c);
             else if (isParticipant) participating.push(c);
             else if (isViewer) watching.push(c);
-            else watching.push(c); // Fallback: keine explizite Rolle -> “Zuschauen”
+            else watching.push(c); // Fallback: keine explizite Rolle -> "Zuschauen"
         }
-        return { mine, participating, watching };
+        return { mine, participating, watching, ended };
     }, [conferences, user?.id]);
 
     const ConferenceCard = ({ conference }: { conference: ConferenceWithParticipants }) => (
@@ -137,21 +156,21 @@ export default function Home() {
     return (
         <>
             <div className="mx-2">
-                <TextSeperator textContent="Meine"/>
+                <TextSeperator textContent="Meine (Admin)"/>
             </div>
 
             <div className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-2 m-2">
-                {mine.filter(c =>  c.status !== "ENDED").map(conference => (
+                {mine.map(conference => (
                     <ConferenceCard key={conference.id} conference={conference}/>
                 ))}
             </div>
 
             <div className="mx-2">
-                <TextSeperator textContent="Teilnahmen"/>
+                <TextSeperator textContent="Präsentieren"/>
             </div>
 
             <div className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-2 m-2">
-                {participating.filter(c => c.status !== "ENDED").map(conference => (
+                {participating.map(conference => (
                     <ConferenceCard key={conference.id} conference={conference}/>
                 ))}
             </div>
@@ -161,7 +180,7 @@ export default function Home() {
             </div>
 
             <div className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-2 m-2">
-                {watching.filter(c => c.status !== "ENDED").map(conference => (
+                {watching.map(conference => (
                     <ConferenceCard key={conference.id} conference={conference}/>
                 ))}
             </div>
@@ -177,54 +196,59 @@ export default function Home() {
             </div>
 
             {showEnded && (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-2 m-2 my-4">
-                    {conferences.filter(c => c.status === "ENDED").map(conference => (
-                        <Card key={conference.id} className="bg-muted text-muted-foreground">
-                            <CardHeader>
-                                <CardTitle>{conference.title}</CardTitle>
-                                <CardDescription>
-                                    {conference.startAt && conference.endDate ? (
-                                        <>
-                                            Von {new Date(conference.startAt).toLocaleDateString("de-DE")} bis{" "}
-                                            {new Date(conference.endDate).toLocaleDateString("de-DE")}
-                                        </>
-                                    ) : (
-                                        "Datum nicht verfügbar"
-                                    )}
-                                </CardDescription>
-                                <CardAction>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <Button
-                                                onClick={() => handleCopy(conference.link, conference.id)}
-                                                size="icon"
-                                                variant="outline"
-                                                className="opacity-50"
-                                            >
-                                                {copiedLinkId === conference.id ? <Check/> : <Copy/>}
-                                            </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                            <p>
-                                                {copiedLinkId === conference.id ? "Kopiert!" : "Link kopieren"}
-                                            </p>
-                                        </TooltipContent>
-                                    </Tooltip>
-                                </CardAction>
-                            </CardHeader>
-                            <CardContent>
-                                <p>{conference.description}</p>
-                            </CardContent>
-                            <CardFooter>
-                                <Button className="opacity-50" size="sm">
-                                    <Link href={`/app/${conference.link}`}>
-                                        Zur Konferenz
-                                    </Link>
-                                </Button>
-                            </CardFooter>
-                        </Card>
-                    ))}
-                </div>
+                <>
+                    <div className="mx-2">
+                        <TextSeperator textContent="Beendete Konferenzen"/>
+                    </div>
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-2 m-2 my-4">
+                        {ended.map(conference => (
+                            <Card key={conference.id} className="bg-muted text-muted-foreground">
+                                <CardHeader>
+                                    <CardTitle>{conference.title}</CardTitle>
+                                    <CardDescription>
+                                        {conference.startAt && conference.endDate ? (
+                                            <>
+                                                Von {new Date(conference.startAt).toLocaleDateString("de-DE")} bis{" "}
+                                                {new Date(conference.endDate).toLocaleDateString("de-DE")}
+                                            </>
+                                        ) : (
+                                            "Datum nicht verfügbar"
+                                        )}
+                                    </CardDescription>
+                                    <CardAction>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button
+                                                    onClick={() => handleCopy(conference.link, conference.id)}
+                                                    size="icon"
+                                                    variant="outline"
+                                                    className="opacity-50"
+                                                >
+                                                    {copiedLinkId === conference.id ? <Check/> : <Copy/>}
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                                <p>
+                                                    {copiedLinkId === conference.id ? "Kopiert!" : "Link kopieren"}
+                                                </p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </CardAction>
+                                </CardHeader>
+                                <CardContent>
+                                    <p>{conference.description}</p>
+                                </CardContent>
+                                <CardFooter>
+                                    <Button className="opacity-50" size="sm">
+                                        <Link href={`/app/${conference.link}`}>
+                                            Zur Konferenz
+                                        </Link>
+                                    </Button>
+                                </CardFooter>
+                            </Card>
+                        ))}
+                    </div>
+                </>
             )}
         </>
     );
