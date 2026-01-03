@@ -1447,8 +1447,64 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                     </div>
 
                                     <div className="flex-1 overflow-y-auto p-4 space-y-6">
-                                        {/* Aktueller Präsentator */}
-                                        {currentPresenter && (
+                                        {/* Organizer */}
+                                        {organizer && (
+                                            <div className="space-y-2">
+                                                <div className="flex items-center gap-2 text-sm font-medium">
+                                                    <Crown className="w-4 h-4 text-purple-500" />
+                                                    <span>Organizer</span>
+                                                </div>
+                                                <div className="p-3 rounded-lg border bg-card flex items-center justify-between hover:bg-accent/50 transition-colors">
+                                                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                                                        {currentPresenter?.id === organizer.id ? (
+                                                            <Crown className="w-4 h-4 text-yellow-500 flex-shrink-0" />
+                                                        ) : (
+                                                            <Crown className="w-4 h-4 text-purple-500 flex-shrink-0" />
+                                                        )}
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="font-medium truncate">{organizer.firstName} {organizer.lastName ?? ""}</div>
+                                                            <div className="text-xs text-muted-foreground">
+                                                                {currentPresenter?.id === organizer.id ? "Organizer & Präsentator" : "Organizer"}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-1 flex-shrink-0">
+                                                        {currentPresenter?.id === organizer.id ? (
+                                                            <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="ghost"
+                                                                        onClick={() => handleSetPresenter(null)}
+                                                                        className="h-8 w-8 p-0"
+                                                                    >
+                                                                        <X className="w-4 h-4" />
+                                                                    </Button>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent>Präsentator entfernen</TooltipContent>
+                                                            </Tooltip>
+                                                        ) : (
+                                                            <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="ghost"
+                                                                        onClick={() => handleSetPresenter(organizer.id)}
+                                                                        className="h-8 w-8 p-0"
+                                                                    >
+                                                                        <Crown className="w-4 h-4" />
+                                                                    </Button>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent>Als Präsentator setzen</TooltipContent>
+                                                            </Tooltip>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Aktueller Präsentator (wenn nicht Organizer) */}
+                                        {currentPresenter && currentPresenter.id !== organizer?.id && (
                                             <div className="space-y-2">
                                                 <div className="flex items-center gap-2 text-sm font-medium">
                                                     <Crown className="w-4 h-4 text-yellow-500" />
