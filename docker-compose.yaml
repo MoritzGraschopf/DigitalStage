@@ -77,17 +77,42 @@ services:
           
           exec ffmpeg -hide_banner -loglevel debug \
             -protocol_whitelist file,udp,rtp \
-            -analyzeduration 10M \
-            -probesize 10M \
+            -analyzeduration 5M \
+            -probesize 5M \
             -fflags nobuffer \
             -flags low_delay \
             -i /sdp/input.sdp \
-            -map 0:v:0 \
-            -c:v libx264 -preset veryfast -tune zerolatency \
+            \
+            -map 0:v:0 -map 0:a:0 \
+            -c:v libx264 -preset veryfast -tune zerolatency -g 120 -keyint_min 120 -sc_threshold 0 \
+            -c:a aac -b:a 128k -ar 48000 \
             -f hls \
             -hls_time 4 \
             -hls_playlist_type event \
-            /hls/testconf/outputstream.m3u8
+            -hls_flags independent_segments \
+            -hls_segment_filename "/hls/screen_%05d.ts" \
+            /hls/screen.m3u8 \
+            \
+            -map 0:v:1 -map 0:a:1 \
+            -c:v libx264 -preset veryfast -tune zerolatency -g 120 -keyint_min 120 -sc_threshold 0 \
+            -c:a aac -b:a 128k -ar 48000 \
+            -f hls \
+            -hls_time 4 \
+            -hls_playlist_type event \
+            -hls_flags independent_segments \
+            -hls_segment_filename "/hls/guest_%05d.ts" \
+            /hls/guest.m3u8 \
+            \
+            -map 0:v:2 -map 0:a:2 \
+            -c:v libx264 -preset veryfast -tune zerolatency -g 120 -keyint_min 120 -sc_threshold 0 \
+            -c:a aac -b:a 128k -ar 48000 \
+            -f hls \
+            -hls_time 4 \
+            -hls_playlist_type event \
+            -hls_flags independent_segments \
+            -hls_segment_filename "/hls/presenter_%05d.ts" \
+            /hls/presenter.m3u8
+
 
 volumes:
   db-data:
