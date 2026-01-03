@@ -24,6 +24,8 @@ type ConferenceWithParticipants = Conference & {
 // Erweitere Role-Type für TypeScript (bis Prisma generate ausgeführt wurde)
 type ExtendedRole = "ORGANIZER" | "PARTICIPANT" | "VIEWER" | "QUESTIONER";
 
+type UserLite = Pick<User, "id" | "firstName" | "lastName">;
+
 const mapStatus = (status: string): string =>
     ({ SCHEDULED: "Geplant", ACTIVE: "Aktiv", ENDED: "Beendet" } as const)[status] ?? "Unbekannt";
 
@@ -461,8 +463,14 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
     const [copied, setCopied] = useState(false);
 
     const [commandOpen, setCommandOpen] = useState(false);
-    const [allUsers, setAllUsers] = useState<User[]>([]);
+    const [userById, setUserById] = useState<Record<string, UserLite>>({});
+    const [presence, setPresence] = useState<{ viewers: string[]; participants: string[] }>({
+        viewers: [],
+        participants: [],
+    });
     const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+    const [inviteQuery, setInviteQuery] = useState("");
+    const [inviteResults, setInviteResults] = useState<UserLite[]>([]);
 
     const { fetchWithAuth, user } = useAuth();
     const { socket, send } = useWebSocket();
@@ -526,28 +534,62 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
         };
     }, [ws, conference?.id, fetchConference]);
 
+    // Presence-Listener
+    useEffect(() => {
+        const off = ws.on("server:presence-update", (msg: unknown) => {
+            const m = msg as { conferenceId?: string; viewers?: string[]; participants?: string[] };
+            if (!m?.conferenceId || m.conferenceId !== conference?.id) return;
+
+            setPresence({
+                viewers: m.viewers ?? [],
+                participants: m.participants ?? [],
+            });
+        });
+        return off;
+    }, [ws, conference?.id]);
+
+    // Batch-User-Lookup: nur IDs die du brauchst
+    const neededUserIds = useMemo(() => {
+        const ids = new Set<string>();
+        if (conference?.organizerId) ids.add(conference.organizerId);
+
+        conference?.participants.forEach(p => ids.add(p.userId)); // DB-Teilnehmer
+        presence.viewers.forEach(id => ids.add(id));              // LIVE Viewer
+        presence.participants.forEach(id => ids.add(id));         // LIVE WebRTC
+
+        return Array.from(ids);
+    }, [conference, presence]);
+
     useEffect(() => {
         let cancelled = false;
         (async () => {
-            try {
-                const r = await fetch("/api/user");
-                const data: User[] = await r.json();
-                if (cancelled) return;
-                setAllUsers(data);
-            } catch (e) {
-                console.error("Error fetching users:", e);
-            }
-        })();
+            if (neededUserIds.length === 0) return;
+
+            const users = await fetchWithAuth<UserLite[]>("/api/user/batch", {
+                method: "POST",
+                body: JSON.stringify({ ids: neededUserIds }),
+            });
+
+            if (cancelled) return;
+
+            setUserById(prev => {
+                const next = { ...prev };
+                for (const u of users) next[u.id] = u;
+                return next;
+            });
+        })().catch(console.error);
+
         return () => { cancelled = true; };
-    }, []);
+    }, [fetchWithAuth, neededUserIds]);
 
     useEffect(() => {
         if (!conference) {
             setOrganizer(null);
             return;
         }
-        setOrganizer(allUsers.find(u => u.id === conference.organizerId) ?? null);
-    }, [conference?.organizerId, allUsers, conference]);
+        const org = userById[conference.organizerId];
+        setOrganizer(org ? { ...org, email: "" } as User : null);
+    }, [conference?.organizerId, userById, conference]);
 
 
     const derivedRole: ExtendedRole = useMemo(() => {
@@ -563,8 +605,9 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
         if (!conference) return null;
         const presenter = conference.participants.find(p => p.isPresenter);
         if (!presenter) return null;
-        return allUsers.find(u => u.id === presenter.userId) ?? null;
-    }, [conference, allUsers]);
+        const user = userById[presenter.userId];
+        return user ? { ...user, email: "" } as User : null;
+    }, [conference, userById]);
 
     // Ist der aktuelle User der Präsentator?
     const isCurrentUserPresenter = useMemo(() => {
@@ -592,10 +635,29 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
         lastInitRef.current = payloadKey;
     }, [ws, user?.id, conference?.id, derivedRole]);
 
-    // Organizer-UI
+    // Organizer-UI: User-Suche für Invite-Dialog
+    useEffect(() => {
+        const q = inviteQuery.trim();
+        const t = setTimeout(async () => {
+            if (q.length < 2) { 
+                setInviteResults([]); 
+                return; 
+            }
+            try {
+                const res = await fetchWithAuth<UserLite[]>(`/api/user/search?q=${encodeURIComponent(q)}`);
+                setInviteResults(res);
+            } catch (err) {
+                console.error("Error searching users:", err);
+                setInviteResults([]);
+            }
+        }, 250);
+
+        return () => clearTimeout(t);
+    }, [inviteQuery, fetchWithAuth]);
+
     const visibleUsers = useMemo(
-        () => allUsers.filter(u => (user ? u.id !== user.id : true)),
-        [allUsers, user]
+        () => inviteResults.filter(u => (user ? u.id !== user.id : true)),
+        [inviteResults, user]
     );
 
     const currentParticipants = useMemo(() => {
@@ -605,21 +667,18 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
             const role = p.role as ExtendedRole;
             return (role === "PARTICIPANT" || role === "QUESTIONER") && p.userId !== conference.organizerId;
         });
-        const mapById = new Map(allUsers.map(u => [u.id, u]));
         return parts
-            .map(p => mapById.get(p.userId))
-            .filter((u): u is User => !!u);
-    }, [conference, allUsers]);
+            .map(p => userById[p.userId])
+            .filter((u): u is UserLite => !!u)
+            .map(u => ({ ...u, email: "" } as User));
+    }, [conference, userById]);
 
-    // Zuschauer (VIEWER)
-    const currentViewers = useMemo(() => {
-        if (!conference) return [] as User[];
-        const viewers = conference.participants.filter(p => p.role === "VIEWER");
-        const mapById = new Map(allUsers.map(u => [u.id, u]));
-        return viewers
-            .map(p => mapById.get(p.userId))
-            .filter((u): u is User => !!u);
-    }, [conference, allUsers]);
+    // Zuschauer (VIEWER) - LIVE aus Presence
+    const currentViewers = useMemo((): UserLite[] => {
+        return presence.viewers
+            .map(id => userById[id])
+            .filter((u): u is UserLite => !!u);
+    }, [presence.viewers, userById]);
 
     const maxTotal = 10;
     const currentCount = currentParticipants.length;
@@ -756,12 +815,9 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
 
     // Map peerId (userId) zu User-Namen
     const getUserName = useCallback((peerId: string): string => {
-        const foundUser = allUsers.find(u => u.id === peerId);
-        if (foundUser) {
-            return `${foundUser.firstName}${foundUser.lastName ? ` ${foundUser.lastName}` : ""}`;
-        }
-        return peerId;
-    }, [allUsers]);
+        const u = userById[peerId];
+        return u ? `${u.firstName}${u.lastName ? ` ${u.lastName}` : ""}` : peerId;
+    }, [userById]);
 
     // Hilfsfunktion: Trenne Screenshare-Streams von normalen Video-Streams
     // Ein Stream mit mehreren Video-Tracks hat wahrscheinlich Screenshare
@@ -840,7 +896,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
         Object.keys(participantStreams).forEach(userId => {
             const uc = conference?.participants.find(p => p.userId === userId);
             const role = uc?.role as ExtendedRole | undefined;
-            const user = allUsers.find(u => u.id === userId);
+            const user = userById[userId];
             if (user) {
                 participants.push({
                     userId,
@@ -855,7 +911,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
         });
 
         return participants;
-    }, [localStream, user, conference, allUsers, derivedRole, participantStreams, audioMuteStatus]);
+    }, [localStream, user, conference, userById, derivedRole, participantStreams, audioMuteStatus]);
 
     if (!conference) {
         return (
@@ -1549,12 +1605,16 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                             <div className="space-y-2">
                                                 <div className="text-sm font-medium">Wird hinzugefügt ({selectedUserIds.length})</div>
                                                 <div className="flex flex-wrap gap-2">
-                                                    {allUsers.filter((u) => selectedUserIds.includes(u.id)).map((u) => (
-                                                        <Badge key={u.id} variant="secondary" className="cursor-pointer hover:bg-secondary/80" onClick={() => toggleUser(u.id)}>
-                                                            {u.firstName} {u.lastName ?? ""}
-                                                            <X className="w-3 h-3 ml-1" />
-                                                        </Badge>
-                                                    ))}
+                                                    {selectedUserIds.map((id) => {
+                                                        const u = userById[id] || inviteResults.find(r => r.id === id);
+                                                        if (!u) return null;
+                                                        return (
+                                                            <Badge key={u.id} variant="secondary" className="cursor-pointer hover:bg-secondary/80" onClick={() => toggleUser(u.id)}>
+                                                                {u.firstName} {u.lastName ?? ""}
+                                                                <X className="w-3 h-3 ml-1" />
+                                                            </Badge>
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
                                         )}
@@ -1565,7 +1625,11 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                     {/* User-Suche */}
                                     <div className="space-y-2">
                                         <div className="text-sm font-medium">Neue Teilnehmer hinzufügen</div>
-                                        <CommandInput placeholder="User suchen..." />
+                                        <CommandInput 
+                                            placeholder="User suchen..." 
+                                            value={inviteQuery}
+                                            onValueChange={setInviteQuery}
+                                        />
                                         <CommandList className="max-h-[200px]">
                                             <CommandEmpty>Keine User gefunden.</CommandEmpty>
                                             <CommandGroup heading="Verfügbare User">

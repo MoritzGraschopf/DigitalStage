@@ -13,7 +13,82 @@ const notInConference = new Map();
 const rtcRooms = new Map();
 const hlsIngest = new Map();
 
+// conferenceId -> { viewers: Map<userId, Set<ws>>, participants: Map<userId, Set<ws>> }
+const presenceByConf = new Map();
+
 const WS = {OPEN: 1};
+
+function ensurePresence(confId) {
+    let p = presenceByConf.get(confId);
+    if (!p) {
+        p = { viewers: new Map(), participants: new Map() };
+        presenceByConf.set(confId, p);
+    }
+    return p;
+}
+
+function addToPresence(map, userId, ws) {
+    let set = map.get(userId);
+    if (!set) {
+        set = new Set();
+        map.set(userId, set);
+    }
+    set.add(ws);
+}
+
+function removeFromPresence(map, userId, ws) {
+    const set = map.get(userId);
+    if (!set) return;
+    set.delete(ws);
+    if (set.size === 0) map.delete(userId);
+}
+
+function broadcastPresence(confId) {
+    const p = presenceByConf.get(confId);
+    const payload = {
+        type: "server:presence-update",
+        conferenceId: confId,
+        viewers: p ? Array.from(p.viewers.keys()) : [],
+        participants: p ? Array.from(p.participants.keys()) : [],
+        ts: Date.now(),
+    };
+
+    for (const client of wss.clients) {
+        if (client.readyState !== WS.OPEN) continue;
+        if (client.conferenceId === confId) safeSend(client, payload);
+    }
+}
+
+function upsertSocketPresence(ws, confId, userId, inConference) {
+    // remove old presence (tab switched conference, role changed, reconnect…)
+    if (ws._presence) {
+        const { confId: oldConf, userId: oldUid, inConference: oldIn } = ws._presence;
+        const oldP = presenceByConf.get(oldConf);
+        if (oldP) {
+            removeFromPresence(oldIn ? oldP.participants : oldP.viewers, oldUid, ws);
+            if (oldP.viewers.size === 0 && oldP.participants.size === 0) presenceByConf.delete(oldConf);
+        }
+        broadcastPresence(oldConf);
+    }
+
+    const p = ensurePresence(confId);
+    addToPresence(inConference ? p.participants : p.viewers, userId, ws);
+    ws._presence = { confId, userId, inConference };
+
+    broadcastPresence(confId);
+}
+
+function removeSocketPresence(ws) {
+    if (!ws._presence) return;
+    const { confId, userId, inConference } = ws._presence;
+    const p = presenceByConf.get(confId);
+    if (p) {
+        removeFromPresence(inConference ? p.participants : p.viewers, userId, ws);
+        if (p.viewers.size === 0 && p.participants.size === 0) presenceByConf.delete(confId);
+    }
+    ws._presence = null;
+    broadcastPresence(confId);
+}
 
 function now() {
     return Date.now();
@@ -64,7 +139,8 @@ const ffmpegRtpCapabilities = {
 
 
 async function getOrCreateRoom(confId) {
-    if (rtcRooms.has(confId)) return rtcRooms.get(confId);
+    if (rtcRooms.has(confId)) 
+        return rtcRooms.get(confId);
 
     const router = await worker.createRouter({mediaCodecs});
     const room = {
@@ -188,48 +264,21 @@ function getVideoPt(consumer) {
     )?.payloadType;
 }
 
-function writeSdp(
-    filePath,
-    {
-        basePort = 5004
-    } = {},
-    {
-        videoPt = 96,
-        audioPt = 111
-    } = {}
-) {
+function writeSdp(filePath, videoSizes = {cam: null, screen: null}, videoPt = 96) {
+    const camSize = videoSizes.cam || "1280x720";
+    const screenSize = videoSizes.screen || "1920x1080";
     const sdp = `v=0
 o=- 0 0 IN IP4 127.0.0.1
-s=DigitalStage RTP Ingest
+s=DigitalStage
+c=IN IP4 0.0.0.0
 t=0 0
-c=IN IP4 127.0.0.1
 
-##### SLOT 0 — SCREEN #####
-m=video ${basePort} RTP/AVP ${videoPt}
+m=video 5004 RTP/AVP ${videoPt}
 a=rtpmap:${videoPt} VP8/90000
-a=recvonly
-m=audio ${basePort + 1} RTP/AVP ${audioPt}
-a=rtpmap:${audioPt} OPUS/48000/2
-a=recvonly
-
-##### SLOT 1 — GUEST #####
-m=video ${basePort + 2} RTP/AVP ${videoPt}
-a=rtpmap:${videoPt} VP8/90000
-a=recvonly
-m=audio ${basePort + 3} RTP/AVP ${audioPt}
-a=rtpmap:${audioPt} OPUS/48000/2
-a=recvonly
-
-##### SLOT 2 — PRESENTER #####
-m=video ${basePort + 4} RTP/AVP ${videoPt}
-a=rtpmap:${videoPt} VP8/90000
-a=recvonly
-m=audio ${basePort + 5} RTP/AVP ${audioPt}
-a=rtpmap:${audioPt} OPUS/48000/2
+a=rtcp:5005
 a=recvonly
 `;
-
-    fs.writeFileSync(filePath, sdp.trim() + "\n");
+    fs.writeFileSync(filePath, sdp);
 }
 
 async function createPlainOut(router, {ip, port, rtcpPort}) {
@@ -343,7 +392,7 @@ async function createWebRtcTransport(router) {
         listenIps: [
             {
                 ip: process.env.MEDIASOUP_LISTEN_IP || "0.0.0.0",
-                announcedIp: process.env.ANNOUNCED_IP || process.env.MEDIASOUP_ANNOUNCED_IP || null, // ✅ CHANGED
+                announcedIp: process.env.ANNOUNCED_IP || process.env.MEDIASOUP_ANNOUNCED_IP || null,
             },
         ],
         enableUdp: true,
@@ -409,6 +458,7 @@ wss.on("connection", (ws) => {
 
     ws.on("close", async () => {
         clearInterval(hb);
+        removeSocketPresence(ws);
         if (ws.userId && ws.conferenceId) {
             await cleanupPeer(ws.conferenceId, ws.userId);
         }
@@ -427,54 +477,64 @@ wss.on("connection", (ws) => {
            UNVERÄNDERT: init / conference / chatMessage / ConferenceParticipantsAdded
            ========================= */
         if (msg.type === "init") {
-            if (msg.inConference) {
-                if (notInConference.has(msg.userId)) notInConference.delete(msg.userId);
-                inConference.set(msg.userId, msg.conferenceId);
+            const userId = msg.userId;
+            const conferenceId = msg.conferenceId;
+            const inConf = !!msg.inConference;
+
+            if (!userId || !conferenceId) return;
+
+            ws.userId = userId;
+            ws.conferenceId = conferenceId;
+            ws.inConference = inConf;
+
+            // optional: alte Maps weiter pflegen (wenn du sie noch brauchst)
+            if (inConf) {
+                notInConference.delete(userId);
+                inConference.set(userId, conferenceId);
             } else {
-                if (inConference.has(msg.userId)) inConference.delete(msg.userId);
-                notInConference.set(msg.userId, msg.conferenceId);
+                inConference.delete(userId);
+                notInConference.set(userId, conferenceId);
             }
-            ws.userId = msg.userId;
+
+            upsertSocketPresence(ws, conferenceId, userId, inConf);
             console.log(msg);
             return;
         }
 
         if (msg.type === "conference") {
-            wss.clients.forEach((client) => {
-                if (!client.userId) return;
-                if (notInConference.has(client.userId)) {
-                    client.send(JSON.stringify({
-                        type: "server:conference",
-                        id: msg.id,
-                        title: msg.title,
-                        description: msg.description,
-                        startAt: msg.startAt,
-                        endDate: msg.endDate,
-                        status: msg.status,
-                        link: msg.link,
-                        organizerId: msg.organizerId,
-                        participants: msg.participants,
-                    }));
-                }
-            });
+            for (const client of wss.clients) {
+                if (client.readyState !== WS.OPEN) continue;
+                if (client.conferenceId !== msg.id) continue;
+                safeSend(client, {
+                    type: "server:conference",
+                    id: msg.id,
+                    title: msg.title,
+                    description: msg.description,
+                    startAt: msg.startAt,
+                    endDate: msg.endDate,
+                    status: msg.status,
+                    link: msg.link,
+                    organizerId: msg.organizerId,
+                    participants: msg.participants,
+                });
+            }
             return;
         }
 
         if (msg.type === "chatMessage") {
-            wss.clients.forEach((client) => {
-                if (!client.userId) return;
-                if (inConference.has(client.userId) && inConference.get(client.userId) === msg.conferenceId) {
-                    client.send(JSON.stringify({
-                        type: "server:chatMessage",
-                        id: msg.id,
-                        message: msg.message,
-                        userId: msg.userId,
-                        conferenceId: msg.conferenceId,
-                        user: msg.user,
-                    }));
-                    console.log(msg);
-                }
-            });
+            for (const client of wss.clients) {
+                if (client.readyState !== WS.OPEN) continue;
+                if (client.conferenceId !== msg.conferenceId) continue;
+                safeSend(client, {
+                    type: "server:chatMessage",
+                    id: msg.id,
+                    message: msg.message,
+                    userId: msg.userId,
+                    conferenceId: msg.conferenceId,
+                    user: msg.user,
+                });
+            }
+            console.log(msg);
             return;
         }
 
