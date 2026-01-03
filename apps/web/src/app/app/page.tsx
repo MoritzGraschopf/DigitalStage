@@ -3,7 +3,7 @@
 import {Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle} from "@/components/ui/card";
 import {Button} from "@/components/ui/button";
 import Link from "next/link";
-import {useEffect, useMemo, useState} from "react";
+import {useCallback, useEffect, useMemo, useState} from "react";
 import {Conference} from "@prisma/client";
 import {useAuth} from "@/context/AuthContext";
 import {Check, Copy} from "lucide-react";
@@ -24,35 +24,52 @@ export default function Home() {
         ws.send({type: "init", userId: user?.id, inConference: false})
     }, [ws, user?.id]);
 
+    const fetchConferences = useCallback(async () => {
+        try {
+            const res = await fetch("/api/conference", {
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    "Content-Type": "application/json"
+                }
+            });
+            const data = await res.json();
+            setConferences(data.conferences);
+        } catch (err) {
+            console.error(err);
+        }
+    }, [token]);
+
     useEffect(() => {
-        ws.on("server:conference", (msg) => {
+        fetchConferences();
+    }, [fetchConferences]);
+
+    useEffect(() => {
+        // Höre auf server:conference Nachrichten (wenn eine Konferenz aktualisiert wird)
+        const unsubscribeConference = ws.on("server:conference", (msg) => {
             const con = msg as ConferenceWithParticipants;
             setConferences((prev) => {
-                // wenn schon vorhanden → nicht erneut hinzufügen
-                if (prev.some(c => c.id === con.id)) return prev;
+                // Wenn bereits vorhanden → aktualisieren, sonst hinzufügen
+                const existingIndex = prev.findIndex(c => c.id === con.id);
+                if (existingIndex >= 0) {
+                    const updated = [...prev];
+                    updated[existingIndex] = con;
+                    return updated;
+                }
                 return [...prev, con];
             });
         });
-    }, [ws]);
 
-    useEffect(() => {
-        const fetchConferences = async () => {
-            try {
-                const res = await fetch("/api/conference", {
-                    headers: {
-                        "Authorization": "Bearer " + token,
-                        "Content-Type": "application/json"
-                    }
-                });
-                const data = await res.json();
-                setConferences(data.conferences);
-            } catch (err) {
-                console.error(err);
-            }
+        // Höre auf ConferenceParticipantsAdded Nachrichten (wenn eine neue Konferenz erstellt wurde)
+        const unsubscribeParticipantsAdded = ws.on("server:ConferenceParticipantsAdded", () => {
+            // Lade alle Konferenzen neu, wenn eine neue erstellt wurde
+            fetchConferences();
+        });
+
+        return () => {
+            unsubscribeConference();
+            unsubscribeParticipantsAdded();
         };
-
-        fetchConferences().then();
-    }, [token]);
+    }, [ws, fetchConferences]);
 
     const handleCopy = async (link: string, id: string) => {
         try {
