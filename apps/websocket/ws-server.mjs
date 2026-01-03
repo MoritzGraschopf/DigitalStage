@@ -188,21 +188,48 @@ function getVideoPt(consumer) {
     )?.payloadType;
 }
 
-function writeSdp(filePath, videoSizes = {cam: null, screen: null}, videoPt = 96) {
-    const camSize = videoSizes.cam || "1280x720";
-    const screenSize = videoSizes.screen || "1920x1080";
+function writeSdp(
+    filePath,
+    {
+        basePort = 5004
+    } = {},
+    {
+        videoPt = 96,
+        audioPt = 111
+    } = {}
+) {
     const sdp = `v=0
 o=- 0 0 IN IP4 127.0.0.1
-s=DigitalStage
-c=IN IP4 0.0.0.0
+s=DigitalStage RTP Ingest
 t=0 0
+c=IN IP4 127.0.0.1
 
-m=video 5004 RTP/AVP ${videoPt}
+##### SLOT 0 — SCREEN #####
+m=video ${basePort} RTP/AVP ${videoPt}
 a=rtpmap:${videoPt} VP8/90000
-a=rtcp:5005
+a=recvonly
+m=audio ${basePort + 1} RTP/AVP ${audioPt}
+a=rtpmap:${audioPt} OPUS/48000/2
+a=recvonly
+
+##### SLOT 1 — GUEST #####
+m=video ${basePort + 2} RTP/AVP ${videoPt}
+a=rtpmap:${videoPt} VP8/90000
+a=recvonly
+m=audio ${basePort + 3} RTP/AVP ${audioPt}
+a=rtpmap:${audioPt} OPUS/48000/2
+a=recvonly
+
+##### SLOT 2 — PRESENTER #####
+m=video ${basePort + 4} RTP/AVP ${videoPt}
+a=rtpmap:${videoPt} VP8/90000
+a=recvonly
+m=audio ${basePort + 5} RTP/AVP ${audioPt}
+a=rtpmap:${audioPt} OPUS/48000/2
 a=recvonly
 `;
-    fs.writeFileSync(filePath, sdp);
+
+    fs.writeFileSync(filePath, sdp.trim() + "\n");
 }
 
 async function createPlainOut(router, {ip, port, rtcpPort}) {
