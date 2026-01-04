@@ -18,7 +18,6 @@ import {
 import {Checkbox} from "@/components/ui/checkbox";
 import {User} from "@prisma/client";
 import {Badge} from "@/components/ui/badge";
-import {cn} from "@/lib/utils";
 import {useAuth} from "@/context/AuthContext";
 import {useWS} from "@/context/WebSocketContext";
 
@@ -33,7 +32,6 @@ const conferenceScheme = z.object({
     description: z.string().max(120, {error: "Die Beschreibung darf höchstens 120 Zeichen enthalten."}).trim().optional(),
     startAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
     endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
-    userIds: z.array(z.string()).max(10, { error: "Maximal 10 Teilnehmer auswählbar." }),
     presenterUserId: z.string().optional(),
 }).refine((d) => {
     const s = new Date(d.startAt);
@@ -75,39 +73,11 @@ const NewConferenceSheet: React.FC<NewConferenceSheetProps> = ({open, setOpen}) 
             description: "",
             startAt: toYYYYMMDDTHHMM(now),
             endDate: toYYYYMMDDTHHMM(inOneHour),
-            userIds: [],
             presenterUserId: undefined,
         },
     });
 
-    const selectedIds = form.watch("userIds") ?? [];
     const presenterUserId = form.watch("presenterUserId");
-
-    const toggleUser = React.useCallback((id: string) => {
-        // eigenen User blocken
-        if (user && id === user.id) {
-            form.setError("userIds", {
-                type: "manual",
-                message: "Du kannst dich nicht selbst auswählen.",
-            });
-            return;
-        }
-
-        const cur = form.getValues("userIds") ?? [];
-        const isSelected = cur.includes(id);
-
-        if (!isSelected && cur.length >= 10) {
-            form.setError("userIds", {
-                type: "manual",
-                message: "Du kannst maximal 10 Teilnehmer auswählen.",
-            });
-            return;
-        }
-
-        const next = isSelected ? cur.filter(x => x !== id) : [...cur, id];
-        form.clearErrors("userIds");
-        form.setValue("userIds", next, { shouldDirty: true, shouldValidate: true });
-    }, [form, user]);
 
     async function onSubmit(values: z.infer<typeof conferenceScheme>) {
         try {
@@ -122,7 +92,6 @@ const NewConferenceSheet: React.FC<NewConferenceSheetProps> = ({open, setOpen}) 
                     description: values.description,
                     startAt: values.startAt,
                     endDate: values.endDate,
-                    userIds: values.userIds,
                     presenterUserId: values.presenterUserId,
                 }),
             });
@@ -137,7 +106,6 @@ const NewConferenceSheet: React.FC<NewConferenceSheetProps> = ({open, setOpen}) 
                 description: "",
                 startAt: toYYYYMMDDTHHMM(new Date()),
                 endDate: toYYYYMMDDTHHMM(new Date(Date.now() + 60 * 60 * 1000)),
-                userIds: [],
                 presenterUserId: undefined,
             });
             setOpen(false);
@@ -163,7 +131,7 @@ const NewConferenceSheet: React.FC<NewConferenceSheetProps> = ({open, setOpen}) 
                 title: data.conference.title,
                 conferenceId: data.conference.id,
                 link: data.conference.link,
-                userIds: values.userIds,          // die eingeladenen User
+                userIds: [],          // keine Teilnehmer mehr beim Erstellen
                 organizerId: data.conference.organizerId,
             });
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -177,11 +145,6 @@ const NewConferenceSheet: React.FC<NewConferenceSheetProps> = ({open, setOpen}) 
         }
     }
 
-    // Sichtbare Users: eigenen User herausfiltern
-    const visibleUsers = React.useMemo(
-        () => users.filter(u => (user ? u.id !== user.id : true)),
-        [users, user]
-    );
 
     return (
         <Sheet open={open} onOpenChange={setOpen}>
@@ -262,80 +225,6 @@ const NewConferenceSheet: React.FC<NewConferenceSheetProps> = ({open, setOpen}) 
 
                             <FormField
                                 control={form.control}
-                                name="userIds"
-                                render={() => (
-                                    <FormItem>
-                                        <FormLabel>Teilnehmer</FormLabel>
-
-                                        {selectedIds.length > 0 && (
-                                            <div className="mt-2 flex flex-wrap gap-1">
-                                                {users
-                                                    .filter((u) => selectedIds.includes(u.id))
-                                                    .map((u) => (
-                                                        <Badge
-                                                            key={u.id}
-                                                            variant="secondary"
-                                                            className="cursor-pointer"
-                                                            onClick={() => toggleUser(u.id)}
-                                                        >
-                                                            {u.firstName + " " + u.lastName}
-                                                        </Badge>
-                                                    ))}
-                                            </div>
-                                        )}
-
-                                        <FormControl>
-                                            <Command
-                                                className={cn(
-                                                    "rounded-md border",
-                                                    form.formState.errors.userIds
-                                                        ? "border-destructive text-destructive focus-visible:ring-destructive"
-                                                        : "border-input focus-visible:ring-ring"
-                                                )}
-                                            >
-                                                <CommandInput placeholder="User suchen..." />
-                                                <CommandList>
-                                                    <CommandEmpty>Keine User gefunden.</CommandEmpty>
-                                                    <CommandGroup heading="Users">
-                                                        {visibleUsers.map((u) => {
-                                                            const checked = selectedIds.includes(u.id);
-                                                            const atLimit = selectedIds.length >= 10;
-
-                                                            return (
-                                                                <CommandItem
-                                                                    key={u.id}
-                                                                    onMouseDown={(e) => e.preventDefault()}
-                                                                    onSelect={() => toggleUser(u.id)}
-                                                                    className="flex items-center gap-2"
-                                                                >
-                                                                    <div
-                                                                        onClick={(e) => e.stopPropagation()}
-                                                                        onMouseDown={(e) => e.preventDefault()}
-                                                                    >
-                                                                        <Checkbox
-                                                                            checked={checked}
-                                                                            disabled={!checked && atLimit}
-                                                                            onCheckedChange={() => toggleUser(u.id)}
-                                                                        />
-                                                                    </div>
-                                                                    <span className="truncate">
-                                                                        {u.firstName} {u.lastName ?? ""}
-                                                                    </span>
-                                                                </CommandItem>
-                                                            );
-                                                        })}
-                                                    </CommandGroup>
-                                                </CommandList>
-                                            </Command>
-                                        </FormControl>
-
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-
-                            <FormField
-                                control={form.control}
                                 name="presenterUserId"
                                 render={() => (
                                     <FormItem>
@@ -390,9 +279,9 @@ const NewConferenceSheet: React.FC<NewConferenceSheetProps> = ({open, setOpen}) 
                                                                 </span>
                                                             </CommandItem>
                                                         )}
-                                                        {/* Ausgewählte Teilnehmer */}
+                                                        {/* Alle anderen User */}
                                                         {users
-                                                            .filter((u) => selectedIds.includes(u.id))
+                                                            .filter((u) => user ? u.id !== user.id : true)
                                                             .map((u) => (
                                                                 <CommandItem
                                                                     key={u.id}
