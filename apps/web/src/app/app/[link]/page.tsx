@@ -673,19 +673,12 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
             .map(u => ({ ...u, email: "" } as User));
     }, [conference, userById]);
 
-    // Zuschauer (VIEWER) - LIVE aus Presence, aber nur die, die auch in der DB als VIEWER eingetragen sind
+    // Zuschauer (VIEWER) - LIVE aus Presence (alle die per WebSocket verbunden sind)
     const currentViewers = useMemo((): UserLite[] => {
-        if (!conference) return [];
-        // Nur User, die sowohl LIVE sind (presence.viewers) als auch in der DB als VIEWER eingetragen sind
-        const viewerIds = new Set(presence.viewers);
-        const dbViewers = conference.participants
-            .filter(p => p.role === "VIEWER" && viewerIds.has(p.userId))
-            .map(p => p.userId);
-        
-        return dbViewers
+        return presence.viewers
             .map(id => userById[id])
             .filter((u): u is UserLite => !!u);
-    }, [presence.viewers, userById, conference]);
+    }, [presence.viewers, userById]);
 
     const maxTotal = 10;
     const currentCount = currentParticipants.length;
