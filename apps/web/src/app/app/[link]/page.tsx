@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
-import { CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Check, Copy, Info, LoaderCircle, MessageCircle, X, Monitor, MonitorOff, Crown, Mic, MicOff, Users } from "lucide-react";
@@ -1254,39 +1254,41 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                         {/* User-Suche */}
                                         <div className="space-y-2">
                                             <div className="text-sm font-medium">Neue Teilnehmer hinzufügen</div>
-                                            <CommandInput 
-                                                placeholder="User suchen..." 
-                                                value={inviteQuery}
-                                                onValueChange={setInviteQuery}
-                                            />
-                                            <CommandList className="max-h-[200px]">
-                                                <CommandEmpty>Keine User gefunden.</CommandEmpty>
-                                                <CommandGroup heading="Verfügbare User">
-                                                    {visibleUsers.map((u) => {
-                                                        const already = currentParticipants.some((p) => p.id === u.id);
-                                                        const checked = selectedUserIds.includes(u.id);
-                                                        return (
-                                                            <CommandItem
-                                                                key={u.id}
-                                                                onMouseDown={(e) => e.preventDefault()}
-                                                                onSelect={() => !already && toggleUser(u.id)}
-                                                                className="flex items-center gap-2"
-                                                            >
-                                                                <div onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.preventDefault()}>
-                                                                    <Checkbox
-                                                                        checked={checked || already}
-                                                                        disabled={already || (!checked && (remainingSlots <= 0 || atLimit))}
-                                                                        onCheckedChange={() => toggleUser(u.id)}
-                                                                        className="flex justify-center items-center"
-                                                                    />
-                                                                </div>
-                                                                <span className="truncate">{u.firstName} {u.lastName ?? ""}</span>
-                                                                {already && <span className="ml-auto text-xs text-muted-foreground">(bereits Teilnehmer)</span>}
-                                                            </CommandItem>
-                                                        );
-                                                    })}
-                                                </CommandGroup>
-                                            </CommandList>
+                                            <Command className="rounded-lg border">
+                                                <CommandInput 
+                                                    placeholder="User suchen..." 
+                                                    value={inviteQuery}
+                                                    onValueChange={setInviteQuery}
+                                                />
+                                                <CommandList className="max-h-[200px]">
+                                                    <CommandEmpty>Keine User gefunden.</CommandEmpty>
+                                                    <CommandGroup heading="Verfügbare User">
+                                                        {visibleUsers.map((u) => {
+                                                            const already = currentParticipants.some((p) => p.id === u.id);
+                                                            const checked = selectedUserIds.includes(u.id);
+                                                            return (
+                                                                <CommandItem
+                                                                    key={u.id}
+                                                                    onMouseDown={(e) => e.preventDefault()}
+                                                                    onSelect={() => !already && toggleUser(u.id)}
+                                                                    className="flex items-center gap-2"
+                                                                >
+                                                                    <div onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.preventDefault()}>
+                                                                        <Checkbox
+                                                                            checked={checked || already}
+                                                                            disabled={already || (!checked && (remainingSlots <= 0 || atLimit))}
+                                                                            onCheckedChange={() => toggleUser(u.id)}
+                                                                            className="flex justify-center items-center"
+                                                                        />
+                                                                    </div>
+                                                                    <span className="truncate">{u.firstName} {u.lastName ?? ""}</span>
+                                                                    {already && <span className="ml-auto text-xs text-muted-foreground">(bereits Teilnehmer)</span>}
+                                                                </CommandItem>
+                                                            );
+                                                        })}
+                                                    </CommandGroup>
+                                                </CommandList>
+                                            </Command>
                                         </div>
 
                                         <div className="flex justify-end gap-2 pt-4">
@@ -1950,39 +1952,41 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                         {/* User-Suche */}
                                         <div className="space-y-2">
                                             <div className="text-sm font-medium">Neue Teilnehmer hinzufügen</div>
-                                            <CommandInput 
-                                                placeholder="User suchen..." 
-                                                value={inviteQuery}
-                                                onValueChange={setInviteQuery}
-                                            />
-                                            <CommandList className="max-h-[200px]">
-                                                <CommandEmpty>Keine User gefunden.</CommandEmpty>
-                                                <CommandGroup heading="Verfügbare User">
-                                                    {visibleUsers.map((u) => {
-                                                        const already = currentParticipants.some((p) => p.id === u.id);
-                                                        const checked = selectedUserIds.includes(u.id);
-                                                        return (
-                                                            <CommandItem
-                                                                key={u.id}
-                                                                onMouseDown={(e) => e.preventDefault()}
-                                                                onSelect={() => !already && toggleUser(u.id)}
-                                                                className="flex items-center gap-2"
-                                                            >
-                                                                <div onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.preventDefault()}>
-                                                                    <Checkbox
-                                                                        checked={checked || already}
-                                                                        disabled={already || (!checked && (remainingSlots <= 0 || atLimit))}
-                                                                        onCheckedChange={() => toggleUser(u.id)}
-                                                                        className="flex justify-center items-center"
-                                                                    />
-                                                                </div>
-                                                                <span className="truncate">{u.firstName} {u.lastName ?? ""}</span>
-                                                                {already && <span className="ml-auto text-xs text-muted-foreground">(bereits Teilnehmer)</span>}
-                                                            </CommandItem>
-                                                        );
-                                                    })}
-                                                </CommandGroup>
-                                            </CommandList>
+                                            <Command className="rounded-lg border">
+                                                <CommandInput 
+                                                    placeholder="User suchen..." 
+                                                    value={inviteQuery}
+                                                    onValueChange={setInviteQuery}
+                                                />
+                                                <CommandList className="max-h-[200px]">
+                                                    <CommandEmpty>Keine User gefunden.</CommandEmpty>
+                                                    <CommandGroup heading="Verfügbare User">
+                                                        {visibleUsers.map((u) => {
+                                                            const already = currentParticipants.some((p) => p.id === u.id);
+                                                            const checked = selectedUserIds.includes(u.id);
+                                                            return (
+                                                                <CommandItem
+                                                                    key={u.id}
+                                                                    onMouseDown={(e) => e.preventDefault()}
+                                                                    onSelect={() => !already && toggleUser(u.id)}
+                                                                    className="flex items-center gap-2"
+                                                                >
+                                                                    <div onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.preventDefault()}>
+                                                                        <Checkbox
+                                                                            checked={checked || already}
+                                                                            disabled={already || (!checked && (remainingSlots <= 0 || atLimit))}
+                                                                            onCheckedChange={() => toggleUser(u.id)}
+                                                                            className="flex justify-center items-center"
+                                                                        />
+                                                                    </div>
+                                                                    <span className="truncate">{u.firstName} {u.lastName ?? ""}</span>
+                                                                    {already && <span className="ml-auto text-xs text-muted-foreground">(bereits Teilnehmer)</span>}
+                                                                </CommandItem>
+                                                            );
+                                                        })}
+                                                    </CommandGroup>
+                                                </CommandList>
+                                            </Command>
                                         </div>
 
                                         <div className="flex justify-end gap-2 pt-4">
