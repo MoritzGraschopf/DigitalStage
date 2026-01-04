@@ -19,6 +19,7 @@ type WSContextType = {
     on: (type: string, fn: MessageHandler) => () => void;
     __addRaw__: (fn: (evt: MessageEvent) => void) => () => void;
     __readyState__: number;
+    reconnectCount: number;
 };
 
 const WSContext = createContext<WSContextType | null>(null);
@@ -43,10 +44,12 @@ const getWsUrl = () => {
 
 export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     const [status, setStatus] = useState<WSStatus>("connecting");
+    const [reconnectCount, setReconnectCount] = useState(0);
     const wsRef = useRef<WebSocket | null>(null);
     const handlers = useRef<Map<string, Set<MessageHandler>>>(new Map());
     const rawHandlers = useRef<Set<(evt: MessageEvent) => void>>(new Set());
     const sendQueueRef = useRef<string[]>([]);
+    const wasConnectedRef = useRef(false);
 
     const flushQueue = useCallback(() => {
         const socket = wsRef.current;
@@ -74,6 +77,11 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
                 setStatus("open");
                 retry = 0;
                 flushQueue();
+                // Wenn wir vorher verbunden waren, ist dies ein Reconnect
+                if (wasConnectedRef.current) {
+                    setReconnectCount((prev) => prev + 1);
+                }
+                wasConnectedRef.current = true;
             };
 
             ws.onmessage = (evt) => {
@@ -132,8 +140,9 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
                 return () => rawHandlers.current.delete(fn);
             },
             __readyState__: ready,
+            reconnectCount,
         };
-    }, [status]);
+    }, [status, reconnectCount]);
 
     return <WSContext.Provider value={api}>{children}</WSContext.Provider>;
 }

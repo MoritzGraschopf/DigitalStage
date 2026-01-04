@@ -51,9 +51,19 @@ export async function POST(
             return NextResponse.json({ message: "Viewers cannot be presenter" }, { status: 400 });
         }
 
-        // Fragesteller können nicht Präsentator werden
-        if (role === "QUESTIONER") {
-            return NextResponse.json({ message: "Questioners cannot be presenter" }, { status: 400 });
+        // Prüfe ob Organizer bereits Präsentator ist
+        const organizerConference = await prisma.userConference.findUnique({
+            where: {
+                userId_conferenceId: { userId: conf.organizerId, conferenceId: conf.id },
+            },
+            select: { isPresenter: true },
+        });
+
+        const isOrganizerPresenter = organizerConference?.isPresenter ?? false;
+
+        // Wenn Organizer Präsentator ist, können Questioner nicht zu Präsentator werden
+        if (isOrganizerPresenter && role === "QUESTIONER") {
+            return NextResponse.json({ message: "Cannot set questioner as presenter when organizer is already presenter" }, { status: 400 });
         }
 
         // Prüfe maximale Anzahl von WebRTC-Teilnehmern, wenn ein externer Präsentator gesetzt wird
@@ -65,32 +75,36 @@ export async function POST(
                 select: {
                     userId: true,
                     role: true,
+                    isPresenter: true,
                 },
             });
 
-            // Zähle aktuelle WebRTC-Teilnehmer (ohne den neuen Präsentator)
+            // Zähle aktuelle WebRTC-Teilnehmer
             let webrtcCount = 0;
             for (const p of allParticipants) {
                 // Organizer ist immer WebRTC-Teilnehmer (wenn nicht VIEWER)
                 if (p.userId === conf.organizerId && p.role !== "VIEWER") {
                     webrtcCount++;
                 }
-                // Fragesteller ist WebRTC-Teilnehmer
+                // Fragesteller sind WebRTC-Teilnehmer
                 if (p.role === "QUESTIONER") {
                     webrtcCount++;
                 }
             }
 
             // Mit externem Präsentator: max 3 (Organizer + Präsentator + Fragesteller)
-            // Aktuell haben wir: Organizer (1) + evtl. Fragesteller (1) = webrtcCount
-            // Mit neuem Präsentator: webrtcCount + 1 (Präsentator)
-            // Maximum ist 3, also: webrtcCount + 1 <= 3, also webrtcCount <= 2
-            if (webrtcCount > 2) {
+            // Wenn der neue Präsentator ein Questioner war, bleibt die Anzahl gleich (Questioner → Presenter)
+            // Wenn der neue Präsentator ein PARTICIPANT ist, wird er zu Präsentator (neuer WebRTC-Teilnehmer)
+            const newPresenterWasQuestioner = role === "QUESTIONER";
+            const webrtcCountAfter = newPresenterWasQuestioner ? webrtcCount : webrtcCount + 1;
+            
+            if (webrtcCountAfter > 3) {
                 return NextResponse.json(
                     {
-                        message: "Cannot set external presenter: Maximum number of WebRTC participants would be exceeded (max 3: Organizer + Presenter + Questioner). Please deactivate a questioner first.",
+                        message: "Cannot set external presenter: Maximum number of WebRTC participants would be exceeded (max 3: Organizer + Presenter + Questioner).",
                         currentCount: webrtcCount,
-                        maxWithExternalPresenter: 3
+                        wouldBeCount: webrtcCountAfter,
+                        maxCount: 3
                     },
                     { status: 400 }
                 );

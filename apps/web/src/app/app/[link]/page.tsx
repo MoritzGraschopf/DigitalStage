@@ -615,6 +615,14 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
         return uc?.isPresenter ?? false;
     }, [conference, user?.id]);
 
+    // Reconnect-Handling: init erneut senden nach WebSocket-Reconnect
+    useEffect(() => {
+        if (ws.status === "open" && ws.reconnectCount > 0) {
+            // WebSocket wurde reconnected, lastInitRef zurücksetzen
+            lastInitRef.current = null;
+        }
+    }, [ws.status, ws.reconnectCount]);
+
     useEffect(() => {
         if (!user?.id || !conference?.id) return;
 
@@ -810,6 +818,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
         userId: rtcReady ? user.id : "",
         conferenceId: conference?.id ?? "",
         role: derivedRole,
+        reconnectCount: ws.reconnectCount,
     });
 
     // Map peerId (userId) zu User-Namen
