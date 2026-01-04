@@ -98,8 +98,8 @@ const ActivityPage: React.FC = () => {
             return false;
         };
 
-        let mine: ConferenceWithParticipants[] = [];
-        let participating: ConferenceWithParticipants[] = [];
+        const mine: ConferenceWithParticipants[] = [];
+        const participating: ConferenceWithParticipants[] = [];
         const ended: ConferenceWithParticipants[] = [];
         const uid = user?.id;
 
