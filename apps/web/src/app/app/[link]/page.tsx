@@ -800,6 +800,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
             fetchConference();
         } catch (e) {
             console.error("Fragesteller deaktivieren fehlgeschlagen:", e);
+            alert(`Fehler: ${e instanceof Error ? e.message : "Unbekannter Fehler"}`);
         }
     };
 
