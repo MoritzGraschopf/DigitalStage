@@ -109,8 +109,9 @@ export function useWebRTC(params: {
     userId: string;
     conferenceId: string;
     role: Role;
+    reconnectCount?: number;
 }) {
-    const { socket, send, userId, conferenceId, role } = params;
+    const { socket, send, userId, conferenceId, role, reconnectCount = 0 } = params;
 
     const [localStream, setLocalStream] = useState<MediaStream | null>(null);
     const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
@@ -522,6 +523,13 @@ export function useWebRTC(params: {
         }
     }, [stopScreenShare]);
 
+    // Reconnect-Handling: initKeyRef zurücksetzen bei Reconnect
+    useEffect(() => {
+        if (reconnectCount > 0) {
+            initKeyRef.current = null;
+        }
+    }, [reconnectCount]);
+
     // ----- Join + Device init
     useEffect(() => {
         if (!userId || !conferenceId) return;
@@ -721,7 +729,7 @@ export function useWebRTC(params: {
 
             request<null>("sfu:leave").catch(() => {});
         };
-    }, [userId, conferenceId, role, consume, request, processPendingNewProducers, iceServers]);
+    }, [userId, conferenceId, role, consume, request, processPendingNewProducers, iceServers, reconnectCount]);
 
     // Lokalen Mikrofon-Status tracken
     useEffect(() => {
