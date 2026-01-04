@@ -28,16 +28,24 @@ export async function POST(
             return NextResponse.json({ message: "Forbidden, organizer only" }, { status: 403 });
         }
 
-        // Prüfe ob User in der Konferenz ist
-        const userConference = await prisma.userConference.findUnique({
+        // Prüfe ob User in der Konferenz ist, wenn nicht: automatisch als VIEWER eintragen (HLS-Viewer)
+        let userConference = await prisma.userConference.findUnique({
             where: {
                 userId_conferenceId: { userId, conferenceId: conf.id },
             },
             select: { role: true },
         });
 
+        // Wenn User nicht in Conference ist, automatisch als VIEWER eintragen (HLS-Viewer der sich gerade anschaut)
         if (!userConference) {
-            return NextResponse.json({ message: "User is not in this conference" }, { status: 404 });
+            userConference = await prisma.userConference.create({
+                data: {
+                    userId,
+                    conferenceId: conf.id,
+                    role: "VIEWER",
+                },
+                select: { role: true },
+            });
         }
 
         // Nur VIEWER können zu QUESTIONER werden
