@@ -45,12 +45,14 @@ export async function POST(
             return NextResponse.json({ message: "User is not in this conference" }, { status: 404 });
         }
 
-        if (userConference.role === "VIEWER") {
+        const role = userConference.role as "ORGANIZER" | "PARTICIPANT" | "VIEWER" | "QUESTIONER";
+        
+        if (role === "VIEWER") {
             return NextResponse.json({ message: "Viewers cannot be presenter" }, { status: 400 });
         }
 
         // Fragesteller können nicht Präsentator werden
-        if (userConference.role === "QUESTIONER") {
+        if (role === "QUESTIONER") {
             return NextResponse.json({ message: "Questioners cannot be presenter" }, { status: 400 });
         }
 
@@ -63,7 +65,6 @@ export async function POST(
                 select: {
                     userId: true,
                     role: true,
-                    isPresenter: true,
                 },
             });
 

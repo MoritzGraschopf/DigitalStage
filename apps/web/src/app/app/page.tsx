@@ -202,10 +202,6 @@ export default function Home() {
                 ))}
             </div>
 
-            <div className="mx-2">
-                <TextSeperator textContent=""/>
-            </div>
-
             <div className="flex justify-center my-4">
                 <Button onClick={() => setShowEnded(!showEnded)} variant="outline" size="sm">
                     {showEnded ? "Verberge beendete Konferenzen" : "Zeige beendete Konferenzen"}
@@ -214,7 +210,7 @@ export default function Home() {
 
             {showEnded && (
                 <>
-                    <div className="mx-2">
+                    <div className="mx-2 my-6">
                         <TextSeperator textContent="Beendete Konferenzen"/>
                     </div>
                     <div className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-2 m-2 my-4">

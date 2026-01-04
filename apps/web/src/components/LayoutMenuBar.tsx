@@ -53,14 +53,9 @@ export default function LayoutMenuBar({logoutAction}: { logoutAction: () => void
     }, [router]);
 
     useEffect(() => {
-        //TODO: es geht noch nicht
         if (!ws || !settings?.notifyConfCreated) return;
         ws.on("server:ConferenceParticipantsAdded", onParticipantsAdded);
     }, [ws, onParticipantsAdded, settings?.notifyConfCreated]);
-
-    const handleReload = () => {
-        console.log("Neu laden triggered!");
-    };
 
     const handleForceReload = () => {
         window.location.reload();
@@ -86,14 +81,9 @@ export default function LayoutMenuBar({logoutAction}: { logoutAction: () => void
                 <MenubarMenu>
                     <MenubarTrigger>Ansicht</MenubarTrigger>
                     <MenubarContent>
-                        <MenubarItem onSelect={handleReload}>
+                        <MenubarItem onSelect={handleForceReload}>
                             Neu laden
                         </MenubarItem>
-                        <MenubarItem onSelect={handleForceReload}>
-                            Erzwinge Neu laden
-                        </MenubarItem>
-                        <MenubarSeparator/>
-                        <MenubarItem>Vollbild umschalten</MenubarItem>
                     </MenubarContent>
                 </MenubarMenu>
                 <MenubarMenu>

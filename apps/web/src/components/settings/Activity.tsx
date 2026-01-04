@@ -1,6 +1,6 @@
 "use client"
 
-import React, {useEffect, useMemo, useState} from "react";
+import React, {useCallback, useEffect, useMemo, useState} from "react";
 import {Separator} from "@/components/ui/separator";
 import {Conference} from "@prisma/client";
 import {useAuth} from "@/context/AuthContext";
@@ -76,7 +76,7 @@ function ConferenceChip({
         <Button asChild variant="outline" size="sm" className="text-sm py-6">
             <Link href={href}>{inner}</Link>
         </Button>
-    )
+    );
 }
 
 const ActivityPage: React.FC = () => {
@@ -85,13 +85,27 @@ const ActivityPage: React.FC = () => {
     const ws = useWS();
 
     const {mine, participating, ended} = useMemo(() => {
-        let mine: ConferenceWithParticipants[] = [];
-        let participating: ConferenceWithParticipants[] = [];
+        // Prüft ob eine Konferenz beendet ist (durch Status oder Datum)
+        const isConferenceEnded = (conference: ConferenceWithParticipants): boolean => {
+            if (conference.status === "ENDED") return true;
+            if (conference.endDate) {
+                const endDate = new Date(conference.endDate);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                endDate.setHours(0, 0, 0, 0);
+                return endDate < today;
+            }
+            return false;
+        };
+
+        const mine: ConferenceWithParticipants[] = [];
+        const participating: ConferenceWithParticipants[] = [];
         const ended: ConferenceWithParticipants[] = [];
         const uid = user?.id;
 
         for (const c of conferences) {
-            if (c.status === "ENDED") {
+            // Beendete Konferenzen in separaten Array
+            if (isConferenceEnded(c)) {
                 const parts = c.participants ?? [];
                 const isOrganizer =
                     (c.organizerId && uid && c.organizerId === uid) ||
@@ -118,15 +132,15 @@ const ActivityPage: React.FC = () => {
         const byEndDesc = (a: Conference, b: Conference) =>
             (toDate(b.endDate)?.getTime() ?? 0) - (toDate(a.endDate)?.getTime() ?? 0);
 
-        mine = mine.filter(c => c.status !== "ENDED").sort(byStartAsc);
-        participating = participating.filter(c => c.status !== "ENDED").sort(byStartAsc);
+        mine.sort(byStartAsc);
+        participating.sort(byStartAsc);
         ended.sort(byEndDesc);
 
         return {mine, participating, ended};
     }, [conferences, user?.id]);
 
-    useEffect(() => {
-        const fetchConferences = async () => {
+    const fetchConferences = useCallback(async () => {
+        try {
             const res = await fetch("/api/conference", {
                 headers: {
                     "Content-Type": "application/json",
@@ -135,16 +149,42 @@ const ActivityPage: React.FC = () => {
             });
             const data = await res.json();
             setConferences(data.conferences);
-        };
-        fetchConferences();
+        } catch (err) {
+            console.error(err);
+        }
     }, [token]);
 
     useEffect(() => {
-        ws.on("server:conference", (msg) => {
+        fetchConferences();
+    }, [fetchConferences]);
+
+    useEffect(() => {
+        // Höre auf server:conference Nachrichten (wenn eine Konferenz aktualisiert wird)
+        const unsubscribeConference = ws.on("server:conference", (msg) => {
             const con = msg as ConferenceWithParticipants;
-            setConferences((prev) => (prev.some(c => c.id === con.id) ? prev : [...prev, con]));
+            setConferences((prev) => {
+                // Wenn bereits vorhanden → aktualisieren, sonst hinzufügen
+                const existingIndex = prev.findIndex(c => c.id === con.id);
+                if (existingIndex >= 0) {
+                    const updated = [...prev];
+                    updated[existingIndex] = con;
+                    return updated;
+                }
+                return [...prev, con];
+            });
         });
-    }, [ws]);
+
+        // Höre auf ConferenceParticipantsAdded Nachrichten (wenn eine neue Konferenz erstellt wurde)
+        const unsubscribeParticipantsAdded = ws.on("server:ConferenceParticipantsAdded", () => {
+            // Lade alle Konferenzen neu, wenn eine neue erstellt wurde
+            fetchConferences();
+        });
+
+        return () => {
+            unsubscribeConference();
+            unsubscribeParticipantsAdded();
+        };
+    }, [ws, fetchConferences]);
 
     useEffect(() => {
         ws.send({type: "init", userId: user?.id, inConference: false});
@@ -155,9 +195,9 @@ const ActivityPage: React.FC = () => {
             <h1 className="text-lg font-medium mb-4">Aktivität</h1>
             <Separator className="my-2"/>
 
-            {/* Meine Konferenzen */}
+            {/* Meine (Admin) */}
             <div>
-                <h3 className="font-medium">Meine Konferenzen</h3>
+                <h3 className="font-medium">Meine (Admin)</h3>
                 <div className="flex flex-wrap gap-2 mt-2">
                     {mine.length === 0 ? (
                         <p className="text-muted-foreground text-sm italic">
@@ -179,9 +219,9 @@ const ActivityPage: React.FC = () => {
 
             <Separator className="my-2"/>
 
-            {/* Teilnahmen */}
+            {/* Präsentieren */}
             <div>
-                <h3 className="font-medium">Teilnahmen</h3>
+                <h3 className="font-medium">Präsentieren</h3>
                 <div className="flex flex-wrap gap-2 mt-2">
                     {participating.length === 0 ? (
                         <p className="text-muted-foreground text-sm italic">

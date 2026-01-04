@@ -698,7 +698,8 @@ export function useWebRTC(params: {
             }
             setIsScreenSharing(false);
 
-            remoteStreamsRef.current.forEach((stream) => {
+            const remoteStreams = remoteStreamsRef.current;
+            remoteStreams.forEach((stream) => {
                 stream.getTracks().forEach((track) => {
                     try {
                         track.stop();
@@ -714,7 +715,8 @@ export function useWebRTC(params: {
                 s?.getTracks().forEach((t) => t.stop());
                 return null;
             });
-            consumedRef.current.clear();
+            const consumed = consumedRef.current;
+            consumed.clear();
             pendingNewProducersRef.current = [];
 
             request<null>("sfu:leave").catch(() => {});
