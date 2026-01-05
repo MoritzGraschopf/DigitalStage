@@ -16,6 +16,12 @@ const hlsIngest = new Map();
 // conferenceId -> { viewers: Map<userId, Set<ws>>, participants: Map<userId, Set<ws>> }
 const presenceByConf = new Map();
 
+// conferenceId -> presenterUserId (null wenn kein Präsentator)
+const presenterByConf = new Map();
+
+// conferenceId -> organizerUserId
+const organizerByConf = new Map();
+
 const WS = {OPEN: 1};
 
 function ensurePresence(confId) {
@@ -191,6 +197,7 @@ async function cleanupHls(confId) {
         }
     } finally {
         hlsIngest.delete(confId);
+        presenterByConf.delete(confId);
     }
 }
 
@@ -261,12 +268,19 @@ async function ensureDir(p) {
 function getVideoPt(consumer) {
     return consumer.rtpParameters.codecs.find(
         c => c.mimeType.toLowerCase() === "video/vp8"
-    )?.payloadType;
+    )?.payloadType || 96;
 }
 
-function writeSdp(filePath, videoSizes = {cam: null, screen: null}, videoPt = 96) {
-    const camSize = videoSizes.cam || "1280x720";
-    const screenSize = videoSizes.screen || "1920x1080";
+function getAudioPt(consumer) {
+    return consumer.rtpParameters.codecs.find(
+        c => c.mimeType.toLowerCase().includes("opus") || c.mimeType.toLowerCase().includes("audio")
+    )?.payloadType || 111;
+}
+
+function writeSdp(filePath, videoPt = 96, audioPt = 111) {
+    // SDP mit allen 8 Streams für FFmpeg (4 Video + 4 Audio)
+    // Reihenfolge: Screen, Presenter, Questioner, Organizer
+    // FFmpeg map: 0:v:0/0:a:0 (Screen), 0:v:1/0:a:1 (Presenter), 0:v:2/0:a:2 (Questioner), 0:v:3/0:a:3 (Organizer)
     const sdp = `v=0
 o=- 0 0 IN IP4 127.0.0.1
 s=DigitalStage
@@ -276,6 +290,41 @@ t=0 0
 m=video 5004 RTP/AVP ${videoPt}
 a=rtpmap:${videoPt} VP8/90000
 a=rtcp:5005
+a=recvonly
+
+m=audio 5005 RTP/AVP ${audioPt}
+a=rtpmap:${audioPt} opus/48000/2
+a=rtcp:5005
+a=recvonly
+
+m=video 5006 RTP/AVP ${videoPt}
+a=rtpmap:${videoPt} VP8/90000
+a=rtcp:5007
+a=recvonly
+
+m=audio 5007 RTP/AVP ${audioPt}
+a=rtpmap:${audioPt} opus/48000/2
+a=rtcp:5007
+a=recvonly
+
+m=video 5008 RTP/AVP ${videoPt}
+a=rtpmap:${videoPt} VP8/90000
+a=rtcp:5009
+a=recvonly
+
+m=audio 5009 RTP/AVP ${audioPt}
+a=rtpmap:${audioPt} opus/48000/2
+a=rtcp:5009
+a=recvonly
+
+m=video 5010 RTP/AVP ${videoPt}
+a=rtpmap:${videoPt} VP8/90000
+a=rtcp:5011
+a=recvonly
+
+m=audio 5011 RTP/AVP ${audioPt}
+a=rtpmap:${audioPt} opus/48000/2
+a=rtcp:5011
 a=recvonly
 `;
     fs.writeFileSync(filePath, sdp);
@@ -318,18 +367,38 @@ async function initHlsForConference(conferenceId, router) {
         console.warn(`⚠️  FFmpeg DNS failed, using fallback IP ${targetIp}`);
     }
 
+    // Port-Zuordnung basierend auf Anforderung:
+    // Screen: Video 5004, Audio 5005
+    // Presenter: Video 5006, Audio 5007
+    // Questioner: Video 5008, Audio 5009
+    // Organizer: Video 5010, Audio 5011
     const transports = {
-        cam: await createPlainOut(router, {ip: targetIp, port: 5004, rtcpPort: 5005}),
-        screen: await createPlainOut(router, {ip: targetIp, port: 5006, rtcpPort: 5007}),
-        audio: await createPlainOut(router, {ip: targetIp, port: 5008, rtcpPort: 5009}),
+        screenVideo: await createPlainOut(router, {ip: targetIp, port: 5004, rtcpPort: 5005}),
+        screenAudio: await createPlainOut(router, {ip: targetIp, port: 5005, rtcpPort: 5005}),
+        presenterVideo: await createPlainOut(router, {ip: targetIp, port: 5006, rtcpPort: 5007}),
+        presenterAudio: await createPlainOut(router, {ip: targetIp, port: 5007, rtcpPort: 5007}),
+        questionerVideo: await createPlainOut(router, {ip: targetIp, port: 5008, rtcpPort: 5009}),
+        questionerAudio: await createPlainOut(router, {ip: targetIp, port: 5009, rtcpPort: 5009}),
+        organizerVideo: await createPlainOut(router, {ip: targetIp, port: 5010, rtcpPort: 5011}),
+        organizerAudio: await createPlainOut(router, {ip: targetIp, port: 5011, rtcpPort: 5011}),
     };
+    
+    // SDP-Datei wird erst geschrieben, wenn der erste Producer ankommt (siehe attachProducerToHls)
 
     const state = {
         routerId: router.id,
-        started:false,
+        started: false,
         transports,
-        consumers:{},
-        videoSizes:{}
+        consumers: {
+            screenVideo: null,
+            screenAudio: null,
+            presenterVideo: null,
+            presenterAudio: null,
+            questionerVideo: null,
+            questionerAudio: null,
+            organizerVideo: null,
+            organizerAudio: null,
+        },
     };
 
     hlsIngest.set(conferenceId, state);
@@ -341,16 +410,29 @@ function startFfmpeg(conferenceId) {
     console.log("🚀 Starting FFmpeg for conference", conferenceId);
 }
 
-async function attachProducerToHls(conferenceId, router, producer, tag) {
+async function attachProducerToHls(conferenceId, router, producer, userId, streamType) {
+    // streamType: "screenVideo", "screenAudio", "presenterVideo", "presenterAudio", "questionerVideo", "questionerAudio", "organizerVideo", "organizerAudio"
     const ingest = await initHlsForConference(conferenceId, router);
 
-    // alte Consumer sauber schließen
-    if (ingest.consumers[tag]) {
-        try { ingest.consumers[tag].close(); } catch {}
-        ingest.consumers[tag] = null;
+    // Start FFmpeg beim ersten Producer (SDP schreiben und FFmpeg starten)
+    if (!ingest.started) {
+        // SDP-Datei erst schreiben, wenn der erste echte Stream ankommt
+        writeSdp("/sdp/input.sdp");
+        startFfmpeg(conferenceId);
+        ingest.started = true;
     }
 
-    const plainTransport = ingest.transports[tag];
+    // Alten Consumer schließen
+    if (ingest.consumers[streamType]) {
+        try { ingest.consumers[streamType].close(); } catch {}
+        ingest.consumers[streamType] = null;
+    }
+
+    const plainTransport = ingest.transports[streamType];
+    if (!plainTransport) {
+        console.error(`Transport ${streamType} nicht gefunden`);
+        return;
+    }
 
     const consumer = await plainTransport.consume({
         producerId: producer.id,
@@ -358,31 +440,18 @@ async function attachProducerToHls(conferenceId, router, producer, tag) {
         paused: false,
     });
 
-    ingest.consumers[tag] = consumer;
+    ingest.consumers[streamType] = consumer;
 
     if (consumer.kind === "video") {
-        const pt = getVideoPt(consumer);
-
-        if (!ingest.started) {
-            ingest.videoSizes[tag] =
-                tag === "screen" ? "1920x1080" : "1280x720";
-
-            writeSdp("/sdp/input.sdp", ingest.videoSizes, pt);
-            startFfmpeg(conferenceId);
-            ingest.started = true;
-        }
-
         await consumer.requestKeyFrame();
-
         const iv = setInterval(() => {
             consumer.requestKeyFrame().catch(() => {});
         }, 2000);
-
         consumer.on("transportclose", () => clearInterval(iv));
         consumer.on("producerclose", () => clearInterval(iv));
     }
 
-    console.log(`✅ RTP + Keyframe confirmed (${tag}) → consumer ${consumer.id}`);
+    console.log(`✅ HLS ${streamType} attached: producer ${producer.id}, consumer ${consumer.id}`);
 }
 
 
@@ -502,9 +571,15 @@ wss.on("connection", (ws) => {
         }
 
         if (msg.type === "conference") {
+            // Organizer-ID tracken
+            if (msg.organizerId && msg.id) {
+                organizerByConf.set(msg.id, msg.organizerId);
+            }
+            
             // Sende an alle Clients, damit sie die Konferenzliste aktualisieren können
             for (const client of wss.clients) {
                 if (client.readyState !== WS.OPEN) continue;
+                if (client.conferenceId !== msg.id) continue; // ✅ wichtig: nur diese Konferenz
                 safeSend(client, {
                     type: "server:conference",
                     id: msg.id,
@@ -564,6 +639,13 @@ wss.on("connection", (ws) => {
         }
 
         if (msg.type === "PresenterChanged") {
+            // Präsentator-Status tracken
+            if (msg.presenterUserId) {
+                presenterByConf.set(msg.conferenceId, msg.presenterUserId);
+            } else {
+                presenterByConf.delete(msg.conferenceId);
+            }
+            
             wss.clients.forEach((client) => {
                 client.send(JSON.stringify({
                     type: "server:PresenterChanged",
@@ -732,16 +814,52 @@ wss.on("connection", (ws) => {
 
                 // HLS mapping: Producers automatisch an FFmpeg anbinden
                 const mediaTag = appData?.mediaTag; // "cam" | "screen" | undefined
+                const presenterUserId = presenterByConf.get(conferenceId);
+                const organizerUserId = organizerByConf.get(conferenceId);
+                const isPresenter = presenterUserId === userId;
+                const isOrganizer = organizerUserId === userId;
+                const isQuestioner = peer?.role === "QUESTIONER";
+                const isOrganizerPresenter = isOrganizer && isPresenter;
+                
                 if (producer.kind === "video") {
                     if (mediaTag === "screen") {
-                        await attachProducerToHls(conferenceId, room.router, producer, "screen").catch(err => console.error("HLS Screen attach failed:", err));
+                        // Screen-Sharing NUR vom Präsentator
+                        if (!isPresenter) {
+                            console.warn(`User ${userId} versucht Screen-Sharing, ist aber nicht Präsentator`);
+                            // Producer wird trotzdem erstellt, aber nicht an HLS gebunden
+                        } else {
+                            await attachProducerToHls(conferenceId, room.router, producer, userId, "screenVideo").catch(err => console.error("HLS Screen Video attach failed:", err));
+                        }
                     } else {
-                        // default: cam
-                        await attachProducerToHls(conferenceId, room.router, producer, "cam").catch(err => console.error("HLS Cam attach failed:", err));
+                        // Kamera-Video
+                        if (isQuestioner) {
+                            // Questioner Video
+                            await attachProducerToHls(conferenceId, room.router, producer, userId, "questionerVideo").catch(err => console.error("HLS Questioner Video attach failed:", err));
+                        } else if (isPresenter && !isOrganizerPresenter) {
+                            // Presenter Video (nur wenn Organizer ≠ Präsentator)
+                            await attachProducerToHls(conferenceId, room.router, producer, userId, "presenterVideo").catch(err => console.error("HLS Presenter Video attach failed:", err));
+                        } else if (isOrganizer && !isOrganizerPresenter) {
+                            // Organizer Video (nur wenn Organizer ≠ Präsentator)
+                            await attachProducerToHls(conferenceId, room.router, producer, userId, "organizerVideo").catch(err => console.error("HLS Organizer Video attach failed:", err));
+                        }
                     }
                 } else if (producer.kind === "audio") {
-                    // Fürs Erste: nur eine Audioquelle aktiv (Presenter ODER Questioner)
-                    await attachProducerToHls(conferenceId, room.router, producer, "audio").catch(err => console.error("HLS Audio attach failed:", err));
+                    // Audio-Mapping
+                    if (isQuestioner) {
+                        // Questioner Audio
+                        await attachProducerToHls(conferenceId, room.router, producer, userId, "questionerAudio").catch(err => console.error("HLS Questioner Audio attach failed:", err));
+                    } else if (isPresenter && !isOrganizerPresenter) {
+                        // Presenter Audio (nur wenn Organizer ≠ Präsentator)
+                        await attachProducerToHls(conferenceId, room.router, producer, userId, "presenterAudio").catch(err => console.error("HLS Presenter Audio attach failed:", err));
+                        // Screen Audio auch vom Präsentator
+                        await attachProducerToHls(conferenceId, room.router, producer, userId, "screenAudio").catch(err => console.error("HLS Screen Audio attach failed:", err));
+                    } else if (isOrganizer && !isOrganizerPresenter) {
+                        // Organizer Audio (nur wenn Organizer ≠ Präsentator)
+                        await attachProducerToHls(conferenceId, room.router, producer, userId, "organizerAudio").catch(err => console.error("HLS Organizer Audio attach failed:", err));
+                    } else if (isOrganizerPresenter) {
+                        // Organizer = Präsentator: nur Screen Audio
+                        await attachProducerToHls(conferenceId, room.router, producer, userId, "screenAudio").catch(err => console.error("HLS Screen Audio attach failed:", err));
+                    }
                 }
 
                 respond(ws, requestId, {id: producer.id}); // ✅ CHANGED

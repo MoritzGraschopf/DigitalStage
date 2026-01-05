@@ -281,24 +281,48 @@ function VideoTile({
 // HLS Viewer Component für Viewer-Rolle
 function HLSViewer({ 
     conferenceId, 
-    currentPresenter 
+    currentPresenter,
+    organizerId,
+    hasQuestioner
 }: { 
     conferenceId: string; 
     currentPresenter: User | null;
+    organizerId: string | null;
+    hasQuestioner: boolean;
 }) {
     const [hasHls, setHasHls] = useState(false);
-    const camVideoRef = useRef<HTMLVideoElement>(null);
     const screenVideoRef = useRef<HTMLVideoElement>(null);
+    const presenterVideoRef = useRef<HTMLVideoElement>(null);
+    const questionerVideoRef = useRef<HTMLVideoElement>(null);
+    const organizerVideoRef = useRef<HTMLVideoElement>(null);
     const audioRef = useRef<HTMLAudioElement>(null);
     const ws = useWS();
+    
+    // Track welche Streams aktiv sind (nicht nur schwarze Frames)
+    const [activeStreams, setActiveStreams] = useState<{
+        screen: boolean;
+        presenter: boolean;
+        questioner: boolean;
+        organizer: boolean;
+    }>({
+        screen: false,
+        presenter: false,
+        questioner: false,
+        organizer: false,
+    });
 
     // HLS-URLs konstruieren
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-    //Für x-Konferenzen gehört das wieder geändert!!!
-    //const camUrl = `${baseUrl}/hls/${conferenceId}/cam/index.m3u8`;
-    const camUrl = `${baseUrl}/hls/testconf/outputstream.m3u8`;
-    //const screenUrl = `${baseUrl}/hls/testconf/screen/index.m3u8`;
-    //const audioUrl = `${baseUrl}/hls/testconf/audio/index.m3u8`;
+    const screenUrl = `${baseUrl}/hls/screen.m3u8`;
+    const presenterUrl = `${baseUrl}/hls/presenter.m3u8`;
+    const questionerUrl = `${baseUrl}/hls/questioner.m3u8`;
+    const organizerUrl = `${baseUrl}/hls/organizer.m3u8`;
+    
+    // Bestimme welche Streams angezeigt werden sollen
+    const isOrganizerPresenter = currentPresenter?.id === organizerId;
+    const showPresenterVideo = !isOrganizerPresenter && !!currentPresenter;
+    const showQuestionerVideo = hasQuestioner;
+    const showOrganizerVideo = !isOrganizerPresenter && !!organizerId;
 
     // WebSocket Event: server:use-hls (optional, für sofortige Benachrichtigung)
     useEffect(() => {
@@ -338,9 +362,46 @@ function HLSViewer({
                 }
             }
 
-            // Helper-Funktion zum Laden eines HLS-Streams
-            const loadStream = (element: HTMLVideoElement | HTMLAudioElement, url: string) => {
+            // Helper-Funktion zum Laden eines HLS-Streams mit Aktivitätsprüfung
+            const loadStream = (
+                element: HTMLVideoElement | HTMLAudioElement, 
+                url: string,
+                streamKey: 'screen' | 'presenter' | 'questioner' | 'organizer' | null = null
+            ) => {
                 if (!element) return;
+
+                const checkStreamActive = (videoEl: HTMLVideoElement) => {
+                    if (!streamKey || !(videoEl instanceof HTMLVideoElement)) return;
+                    
+                    // Prüfe ob Video aktiv ist (nicht nur schwarze Frames)
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) return;
+                    
+                    canvas.width = videoEl.videoWidth || 1;
+                    canvas.height = videoEl.videoHeight || 1;
+                    ctx.drawImage(videoEl, 0, 0);
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const data = imageData.data;
+                    
+                    // Prüfe ob alle Pixel schwarz sind (oder sehr dunkel)
+                    let allBlack = true;
+                    for (let i = 0; i < data.length; i += 4) {
+                        const r = data[i];
+                        const g = data[i + 1];
+                        const b = data[i + 2];
+                        // Wenn ein Pixel nicht schwarz ist (Toleranz für Encoding-Artefakte)
+                        if (r > 5 || g > 5 || b > 5) {
+                            allBlack = false;
+                            break;
+                        }
+                    }
+                    
+                    setActiveStreams(prev => ({
+                        ...prev,
+                        [streamKey]: !allBlack && videoEl.readyState >= 2
+                    }));
+                };
 
                 if (HlsClass && HlsClass.isSupported()) {
                     // HLS.js für Chrome/Firefox/etc.
@@ -352,39 +413,81 @@ function HLSViewer({
                     hls.attachMedia(element);
                     hls.on(HlsClass.Events.MANIFEST_PARSED, () => {
                         element.play().catch((err) => console.warn("Autoplay blocked:", err));
+                        if (streamKey && element instanceof HTMLVideoElement) {
+                            // Prüfe nach kurzer Verzögerung ob Stream aktiv ist
+                            setTimeout(() => checkStreamActive(element), 2000);
+                            // Regelmäßig prüfen
+                            const interval = setInterval(() => {
+                                if (element.readyState >= 2) {
+                                    checkStreamActive(element);
+                                }
+                            }, 3000);
+                            element.addEventListener('loadeddata', () => {
+                                checkStreamActive(element);
+                            });
+                            // Cleanup
+                            element.addEventListener('ended', () => {
+                                clearInterval(interval);
+                                setActiveStreams(prev => ({ ...prev, [streamKey]: false }));
+                            });
+                        }
                     });
                     hls.on(HlsClass.Events.ERROR, (_event, data) => {
                         if (data.fatal) {
                             console.error("HLS fatal error:", data);
+                            if (streamKey) {
+                                setActiveStreams(prev => ({ ...prev, [streamKey]: false }));
+                            }
                         }
                     });
                 } else if (element.canPlayType('application/vnd.apple.mpegurl')) {
                     // Native HLS-Unterstützung (Safari, iOS)
                     element.src = url;
                     element.play().catch((err) => console.warn("Autoplay blocked:", err));
+                    if (streamKey && element instanceof HTMLVideoElement) {
+                        element.addEventListener('loadeddata', () => {
+                            setTimeout(() => checkStreamActive(element), 2000);
+                        });
+                        const interval = setInterval(() => {
+                            if (element.readyState >= 2) {
+                                checkStreamActive(element);
+                            }
+                        }, 3000);
+                        element.addEventListener('ended', () => {
+                            clearInterval(interval);
+                            setActiveStreams(prev => ({ ...prev, [streamKey]: false }));
+                        });
+                    }
                 } else {
                     console.warn("HLS wird nicht unterstützt in diesem Browser");
                 }
             };
 
-            // Streams laden
-            if (camVideoRef.current) {
-                loadStream(camVideoRef.current, camUrl);
-            }
-
-            /*
+            // Screen-Stream immer laden (wird vom Präsentator gesendet)
             if (screenVideoRef.current) {
-                loadStream(screenVideoRef.current, screenUrl);
+                loadStream(screenVideoRef.current, screenUrl, 'screen');
             }
+            
+            // Andere Streams nur laden wenn sie angezeigt werden sollen
+            if (showPresenterVideo && presenterVideoRef.current) {
+                loadStream(presenterVideoRef.current, presenterUrl, 'presenter');
+            }
+            if (showQuestionerVideo && questionerVideoRef.current) {
+                loadStream(questionerVideoRef.current, questionerUrl, 'questioner');
+            }
+            if (showOrganizerVideo && organizerVideoRef.current) {
+                loadStream(organizerVideoRef.current, organizerUrl, 'organizer');
+            }
+            
+            // Audio von allen aktiven Streams mischen (unsichtbar)
             if (audioRef.current) {
-                loadStream(audioRef.current, audioUrl);
+                // Audio wird automatisch vom Screen-Stream mitgeliefert
+                loadStream(audioRef.current, screenUrl);
             }
-
-             */
         };
 
         loadHls()
-    }, [hasHls, camUrl]);
+    }, [hasHls, screenUrl, presenterUrl, questionerUrl, organizerUrl, showPresenterVideo, showQuestionerVideo, showOrganizerVideo]);
 
     if (!hasHls) {
         return (
@@ -407,6 +510,21 @@ function HLSViewer({
         );
     }
 
+    // Sammle alle aktiven Video-Streams (außer Screen)
+    const activeVideoStreams = useMemo(() => {
+        const streams: Array<{ key: string; ref: React.RefObject<HTMLVideoElement | null>; label: string }> = [];
+        if (activeStreams.presenter && showPresenterVideo) {
+            streams.push({ key: 'presenter', ref: presenterVideoRef, label: 'Präsentator' });
+        }
+        if (activeStreams.questioner && showQuestionerVideo) {
+            streams.push({ key: 'questioner', ref: questionerVideoRef, label: 'Fragesteller' });
+        }
+        if (activeStreams.organizer && showOrganizerVideo) {
+            streams.push({ key: 'organizer', ref: organizerVideoRef, label: 'Organisator' });
+        }
+        return streams;
+    }, [activeStreams, showPresenterVideo, showQuestionerVideo, showOrganizerVideo]);
+
     return (
         <div className="h-full flex flex-col p-2 sm:p-3 md:p-4 gap-3 sm:gap-4">
             {/* Präsentator-Info */}
@@ -421,34 +539,78 @@ function HLSViewer({
 
             {/* Screen-Share groß (wenn verfügbar) */}
             <div className="flex-1 min-h-0 relative rounded-xl overflow-hidden bg-black">
-                <video
-                    ref={screenVideoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-contain"
-                />
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent px-4 py-3">
-                    <span className="text-sm font-semibold text-white">Bildschirm-Freigabe</span>
-                </div>
-
-                {/* Kamera-Stream als Overlay unten rechts */}
-                <div className="absolute bottom-4 right-4 w-48 sm:w-56 md:w-64 h-32 sm:h-40 rounded-xl overflow-hidden bg-gradient-to-br from-background to-muted/30 border-2 border-background shadow-2xl">
+                {activeStreams.screen ? (
                     <video
-                        ref={camVideoRef}
+                        ref={screenVideoRef}
                         autoPlay
                         playsInline
                         muted
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain"
                     />
-                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent px-2 py-2">
-                        <span className="text-xs font-semibold text-white">Kamera</span>
+                ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                        <span className="text-muted-foreground">Keine Bildschirm-Freigabe</span>
                     </div>
-                </div>
+                )}
+                {activeStreams.screen && (
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent px-4 py-3">
+                        <span className="text-sm font-semibold text-white">Bildschirm-Freigabe</span>
+                    </div>
+                )}
+
+                {/* Video-Streams als Overlay unten rechts (dynamisch) */}
+                {activeVideoStreams.length > 0 && (
+                    <div className="absolute bottom-4 right-4 flex flex-col gap-2 items-end">
+                        {activeVideoStreams.map((stream, index) => (
+                            <div
+                                key={stream.key}
+                                className="w-48 sm:w-56 md:w-64 h-32 sm:h-40 rounded-xl overflow-hidden bg-gradient-to-br from-background to-muted/30 border-2 border-background shadow-2xl"
+                                style={{
+                                    animation: `slideInRight 0.3s ease-out ${index * 0.1}s both`
+                                }}
+                            >
+                                <video
+                                    ref={stream.ref}
+                                    autoPlay
+                                    playsInline
+                                    muted
+                                    className="w-full h-full object-cover"
+                                />
+                                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent px-2 py-2">
+                                    <span className="text-xs font-semibold text-white">{stream.label}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* Audio-Stream (unsichtbar) */}
-            <audio ref={audioRef} autoPlay playsInline muted/>
+            <audio ref={audioRef} autoPlay playsInline />
+            
+            {/* Versteckte Video-Elemente für Streams die noch nicht aktiv sind */}
+            {showPresenterVideo && !activeStreams.presenter && (
+                <video ref={presenterVideoRef} autoPlay playsInline muted className="hidden" />
+            )}
+            {showQuestionerVideo && !activeStreams.questioner && (
+                <video ref={questionerVideoRef} autoPlay playsInline muted className="hidden" />
+            )}
+            {showOrganizerVideo && !activeStreams.organizer && (
+                <video ref={organizerVideoRef} autoPlay playsInline muted className="hidden" />
+            )}
+            
+            <style jsx>{`
+                @keyframes slideInRight {
+                    from {
+                        opacity: 0;
+                        transform: translateX(100%);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateX(0);
+                    }
+                }
+            `}</style>
         </div>
     );
 }
@@ -1386,6 +1548,8 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                             <HLSViewer 
                                 conferenceId={conference.id} 
                                 currentPresenter={currentPresenter}
+                                organizerId={conference.organizerId}
+                                hasQuestioner={conference.participants.some(p => (p.role as ExtendedRole) === "QUESTIONER")}
                             />
                         ) : (
                             <div className="h-full relative flex flex-col p-2 sm:p-3 md:p-4 gap-3 sm:gap-4">
