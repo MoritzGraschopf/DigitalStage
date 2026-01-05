@@ -278,9 +278,6 @@ function getAudioPt(consumer) {
 }
 
 function writeSdp(filePath, videoPt = 96, audioPt = 111) {
-    // SDP mit allen 8 Streams für FFmpeg (4 Video + 4 Audio)
-    // Reihenfolge: Screen, Presenter, Questioner, Organizer
-    // FFmpeg map: 0:v:0/0:a:0 (Screen), 0:v:1/0:a:1 (Presenter), 0:v:2/0:a:2 (Questioner), 0:v:3/0:a:3 (Organizer)
     const sdp = `v=0
 o=- 0 0 IN IP4 127.0.0.1
 s=DigitalStage
@@ -292,17 +289,7 @@ a=rtpmap:${videoPt} VP8/90000
 a=rtcp:5005
 a=recvonly
 
-m=audio 5005 RTP/AVP ${audioPt}
-a=rtpmap:${audioPt} opus/48000/2
-a=rtcp:5005
-a=recvonly
-
-m=video 5006 RTP/AVP ${videoPt}
-a=rtpmap:${videoPt} VP8/90000
-a=rtcp:5007
-a=recvonly
-
-m=audio 5007 RTP/AVP ${audioPt}
+m=audio 5006 RTP/AVP ${audioPt}
 a=rtpmap:${audioPt} opus/48000/2
 a=rtcp:5007
 a=recvonly
@@ -312,23 +299,34 @@ a=rtpmap:${videoPt} VP8/90000
 a=rtcp:5009
 a=recvonly
 
-m=audio 5009 RTP/AVP ${audioPt}
+m=audio 5010 RTP/AVP ${audioPt}
 a=rtpmap:${audioPt} opus/48000/2
-a=rtcp:5009
+a=rtcp:5011
 a=recvonly
 
-m=video 5010 RTP/AVP ${videoPt}
+m=video 5012 RTP/AVP ${videoPt}
 a=rtpmap:${videoPt} VP8/90000
-a=rtcp:5011
+a=rtcp:5013
 a=recvonly
 
-m=audio 5011 RTP/AVP ${audioPt}
+m=audio 5014 RTP/AVP ${audioPt}
 a=rtpmap:${audioPt} opus/48000/2
-a=rtcp:5011
+a=rtcp:5015
+a=recvonly
+
+m=video 5016 RTP/AVP ${videoPt}
+a=rtpmap:${videoPt} VP8/90000
+a=rtcp:5017
+a=recvonly
+
+m=audio 5018 RTP/AVP ${audioPt}
+a=rtpmap:${audioPt} opus/48000/2
+a=rtcp:5019
 a=recvonly
 `;
     fs.writeFileSync(filePath, sdp);
 }
+
 
 async function createPlainOut(router, {ip, port, rtcpPort}) {
     const transport = await router.createPlainTransport({
@@ -373,14 +371,14 @@ async function initHlsForConference(conferenceId, router) {
     // Questioner: Video 5008, Audio 5009
     // Organizer: Video 5010, Audio 5011
     const transports = {
-        screenVideo: await createPlainOut(router, {ip: targetIp, port: 5004, rtcpPort: 5005}),
-        screenAudio: await createPlainOut(router, {ip: targetIp, port: 5005, rtcpPort: 5005}),
-        presenterVideo: await createPlainOut(router, {ip: targetIp, port: 5006, rtcpPort: 5007}),
-        presenterAudio: await createPlainOut(router, {ip: targetIp, port: 5007, rtcpPort: 5007}),
-        questionerVideo: await createPlainOut(router, {ip: targetIp, port: 5008, rtcpPort: 5009}),
-        questionerAudio: await createPlainOut(router, {ip: targetIp, port: 5009, rtcpPort: 5009}),
-        organizerVideo: await createPlainOut(router, {ip: targetIp, port: 5010, rtcpPort: 5011}),
-        organizerAudio: await createPlainOut(router, {ip: targetIp, port: 5011, rtcpPort: 5011}),
+        screenVideo:     await createPlainOut(router, { ip: targetIp, port: 5004, rtcpPort: 5005 }),
+        screenAudio:     await createPlainOut(router, { ip: targetIp, port: 5006, rtcpPort: 5007 }),
+        presenterVideo:  await createPlainOut(router, { ip: targetIp, port: 5008, rtcpPort: 5009 }),
+        presenterAudio:  await createPlainOut(router, { ip: targetIp, port: 5010, rtcpPort: 5011 }),
+        questionerVideo: await createPlainOut(router, { ip: targetIp, port: 5012, rtcpPort: 5013 }),
+        questionerAudio: await createPlainOut(router, { ip: targetIp, port: 5014, rtcpPort: 5015 }),
+        organizerVideo:  await createPlainOut(router, { ip: targetIp, port: 5016, rtcpPort: 5017 }),
+        organizerAudio:  await createPlainOut(router, { ip: targetIp, port: 5018, rtcpPort: 5019 }),
     };
     
     // SDP-Datei wird erst geschrieben, wenn der erste Producer ankommt (siehe attachProducerToHls)
