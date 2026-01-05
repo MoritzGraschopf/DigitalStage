@@ -75,16 +75,40 @@ services:
             sleep 1
           done
           
-          exec ffmpeg -hide_banner -loglevel debug \
-            -protocol_whitelist file,udp,rtp \
+          exec ffmpeg -hide_banner -loglevel warning \
+            -protocol_whitelist file,udp,rtp,lavfi \
             -analyzeduration 5M \
             -probesize 5M \
             -fflags nobuffer \
             -flags low_delay \
+            -re \
             -i /sdp/input.sdp \
+            -f lavfi -i color=c=black:s=1920x1080:r=30 \
+            -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=48000 \
+            -f lavfi -i color=c=black:s=1280x720:r=30 \
+            -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=48000 \
+            -f lavfi -i color=c=black:s=1280x720:r=30 \
+            -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=48000 \
+            -f lavfi -i color=c=black:s=1280x720:r=30 \
+            -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=48000 \
+            \
+            -filter_complex "\
+              [0:v:0]scale=1920:1080[rtp_v0]; \
+              [rtp_v0][1:v]overlay=shortest=1:eof_action=pass[v0]; \
+              [0:a:0][2:a]amix=inputs=2:duration=first:dropout_transition=0[a0]; \
+              [0:v:1]scale=1280:720[rtp_v1]; \
+              [rtp_v1][3:v]overlay=shortest=1:eof_action=pass[v1]; \
+              [0:a:1][4:a]amix=inputs=2:duration=first:dropout_transition=0[a1]; \
+              [0:v:2]scale=1280:720[rtp_v2]; \
+              [rtp_v2][5:v]overlay=shortest=1:eof_action=pass[v2]; \
+              [0:a:2][6:a]amix=inputs=2:duration=first:dropout_transition=0[a2]; \
+              [0:v:3]scale=1280:720[rtp_v3]; \
+              [rtp_v3][7:v]overlay=shortest=1:eof_action=pass[v3]; \
+              [0:a:3][8:a]amix=inputs=2:duration=first:dropout_transition=0[a3] \
+            " \
             \
             ##### SCREEN #####
-            -map 0:v:0 -map 0:a:0 \
+            -map [v0] -map [a0] \
             -c:v libx264 -preset veryfast -tune zerolatency \
             -g 60 -keyint_min 60 -sc_threshold 0 \
             -c:a aac -b:a 128k -ar 48000 \
@@ -95,20 +119,8 @@ services:
             -hls_segment_filename "/hls/screen_%05d.ts" \
             /hls/screen.m3u8 \
             \
-            ##### GUEST #####
-            -map 0:v:1 -map 0:a:1 \
-            -c:v libx264 -preset veryfast -tune zerolatency \
-            -g 60 -keyint_min 60 -sc_threshold 0 \
-            -c:a aac -b:a 128k -ar 48000 \
-            -f hls \
-            -hls_time 2 \
-            -hls_list_size 3 \
-            -hls_flags delete_segments+independent_segments \
-            -hls_segment_filename "/hls/guest_%05d.ts" \
-            /hls/guest.m3u8 \
-            \
             ##### PRESENTER #####
-            -map 0:v:2 -map 0:a:2 \
+            -map [v1] -map [a1] \
             -c:v libx264 -preset veryfast -tune zerolatency \
             -g 60 -keyint_min 60 -sc_threshold 0 \
             -c:a aac -b:a 128k -ar 48000 \
@@ -117,7 +129,31 @@ services:
             -hls_list_size 3 \
             -hls_flags delete_segments+independent_segments \
             -hls_segment_filename "/hls/presenter_%05d.ts" \
-            /hls/presenter.m3u8
+            /hls/presenter.m3u8 \
+            \
+            ##### QUESTIONER #####
+            -map [v2] -map [a2] \
+            -c:v libx264 -preset veryfast -tune zerolatency \
+            -g 60 -keyint_min 60 -sc_threshold 0 \
+            -c:a aac -b:a 128k -ar 48000 \
+            -f hls \
+            -hls_time 2 \
+            -hls_list_size 3 \
+            -hls_flags delete_segments+independent_segments \
+            -hls_segment_filename "/hls/questioner_%05d.ts" \
+            /hls/questioner.m3u8 \
+            \
+            ##### ORGANIZER #####
+            -map [v3] -map [a3] \
+            -c:v libx264 -preset veryfast -tune zerolatency \
+            -g 60 -keyint_min 60 -sc_threshold 0 \
+            -c:a aac -b:a 128k -ar 48000 \
+            -f hls \
+            -hls_time 2 \
+            -hls_list_size 3 \
+            -hls_flags delete_segments+independent_segments \
+            -hls_segment_filename "/hls/organizer_%05d.ts" \
+            /hls/organizer.m3u8
 
 
 
