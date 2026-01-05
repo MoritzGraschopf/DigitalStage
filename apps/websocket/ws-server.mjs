@@ -366,10 +366,10 @@ async function initHlsForConference(conferenceId, router) {
     }
 
     // Port-Zuordnung basierend auf Anforderung:
-    // Screen: Video 5004, Audio 5005
-    // Presenter: Video 5006, Audio 5007
-    // Questioner: Video 5008, Audio 5009
-    // Organizer: Video 5010, Audio 5011
+    // Screen: Video 5004, Audio 5006
+    // Presenter: Video 5008, Audio 5010
+    // Questioner: Video 5012, Audio 5014
+    // Organizer: Video 5016, Audio 5018
     const transports = {
         screenVideo:     await createPlainOut(router, { ip: targetIp, port: 5004, rtcpPort: 5005 }),
         screenAudio:     await createPlainOut(router, { ip: targetIp, port: 5006, rtcpPort: 5007 }),
@@ -381,7 +381,8 @@ async function initHlsForConference(conferenceId, router) {
         organizerAudio:  await createPlainOut(router, { ip: targetIp, port: 5018, rtcpPort: 5019 }),
     };
     
-    // SDP-Datei wird erst geschrieben, wenn der erste Producer ankommt (siehe attachProducerToHls)
+    // SDP-Datei schreiben (einmalig bei Init, damit FFmpeg starten kann)
+    writeSdp("/sdp/input.sdp");
 
     const state = {
         routerId: router.id,
@@ -412,10 +413,8 @@ async function attachProducerToHls(conferenceId, router, producer, userId, strea
     // streamType: "screenVideo", "screenAudio", "presenterVideo", "presenterAudio", "questionerVideo", "questionerAudio", "organizerVideo", "organizerAudio"
     const ingest = await initHlsForConference(conferenceId, router);
 
-    // Start FFmpeg beim ersten Producer (SDP schreiben und FFmpeg starten)
+    // Start FFmpeg beim ersten Producer
     if (!ingest.started) {
-        // SDP-Datei erst schreiben, wenn der erste echte Stream ankommt
-        writeSdp("/sdp/input.sdp");
         startFfmpeg(conferenceId);
         ingest.started = true;
     }
@@ -702,6 +701,13 @@ wss.on("connection", (ws) => {
                         }
                         await cleanupPeer(conferenceId, userId);
                     }
+                }
+
+                // HLS-Infrastruktur initialisieren, wenn jemand als WebRTC-Teilnehmer joint (nicht Viewer)
+                if (role !== "VIEWER") {
+                    await initHlsForConference(conferenceId, room.router).catch(err => {
+                        console.error("Failed to init HLS for conference:", err);
+                    });
                 }
 
                 if (role === "VIEWER") {
