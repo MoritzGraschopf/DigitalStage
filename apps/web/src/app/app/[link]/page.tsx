@@ -511,19 +511,19 @@ function HLSViewer({
     }
 
     // Sammle alle aktiven Video-Streams (außer Screen)
-    const activeVideoStreams = useMemo(() => {
-        const streams: Array<{ key: string; ref: React.RefObject<HTMLVideoElement | null>; label: string }> = [];
-        if (activeStreams.presenter && showPresenterVideo) {
-            streams.push({ key: 'presenter', ref: presenterVideoRef, label: 'Präsentator' });
-        }
-        if (activeStreams.questioner && showQuestionerVideo) {
-            streams.push({ key: 'questioner', ref: questionerVideoRef, label: 'Fragesteller' });
-        }
-        if (activeStreams.organizer && showOrganizerVideo) {
-            streams.push({ key: 'organizer', ref: organizerVideoRef, label: 'Organisator' });
-        }
-        return streams;
-    }, [activeStreams, showPresenterVideo, showQuestionerVideo, showOrganizerVideo]);
+    const activeVideoStreams =
+        [
+            activeStreams.presenter && showPresenterVideo
+                ? { key: 'presenter', ref: presenterVideoRef, label: 'Präsentator' }
+                : null,
+            activeStreams.questioner && showQuestionerVideo
+                ? { key: 'questioner', ref: questionerVideoRef, label: 'Fragesteller' }
+                : null,
+            activeStreams.organizer && showOrganizerVideo
+                ? { key: 'organizer', ref: organizerVideoRef, label: 'Organisator' }
+                : null,
+        ].filter(Boolean) as Array<{ key: string; ref: React.RefObject<HTMLVideoElement | null>; label: string }>;
+
 
     return (
         <div className="h-full flex flex-col p-2 sm:p-3 md:p-4 gap-3 sm:gap-4">
