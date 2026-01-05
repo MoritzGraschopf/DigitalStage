@@ -77,8 +77,11 @@ services:
           
           exec ffmpeg -hide_banner -loglevel warning \
             -protocol_whitelist file,udp,rtp,lavfi \
-            -analyzeduration 20M -probesize 20M \
-            -fflags nobuffer -flags low_delay \
+            -analyzeduration 5M \
+            -probesize 5M \
+            -fflags nobuffer \
+            -flags low_delay \
+            -rw_timeout 0 \
             -i /sdp/input.sdp \
             -f lavfi -i color=c=black:s=1920x1080:r=30 \
             -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=48000 \
@@ -89,22 +92,27 @@ services:
             -f lavfi -i color=c=black:s=1280x720:r=30 \
             -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=48000 \
             -filter_complex "\
-            [0:v:0]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2[sv0]; \
-            [1:v][sv0]overlay=shortest=1:eof_action=pass[v0]; \
-            [0:v:1]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2[sv1]; \
-            [3:v][sv1]overlay=shortest=1:eof_action=pass[v1]; \
-            [0:v:2]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2[sv2]; \
-            [5:v][sv2]overlay=shortest=1:eof_action=pass[v2]; \
-            [0:v:3]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2[sv3]; \
-            [7:v][sv3]overlay=shortest=1:eof_action=pass[v3]; \
-            [2:a]anull[a0]; \
-            [4:a]anull[a1]; \
-            [6:a]anull[a2]; \
-            [8:a]anull[a3] \
-            " \
-            \
-            -map "[v0]" -map "[a0]" \
-            -c:v libx264 -preset veryfast -tune zerolatency -g 60 -keyint_min 60 -sc_threshold 0 \
+              [0:v:0]scale=1920:1080:eval=frame[ov0]; \
+              [1:v][ov0]overlay=shortest=0:eof_action=pass[v0]; \
+              [0:a:0][2:a]amix=inputs=2:duration=longest:dropout_transition=0[a0]; \
+              \
+              [0:v:1]scale=1280:720:eval=frame[ov1]; \
+              [3:v][ov1]overlay=shortest=0:eof_action=pass[v1]; \
+              [0:a:1][4:a]amix=inputs=2:duration=longest:dropout_transition=0[a1]; \
+              \
+              [0:v:2]scale=1280:720:eval=frame[ov2]; \
+              [5:v][ov2]overlay=shortest=0:eof_action=pass[v2]; \
+              [0:a:2][6:a]amix=inputs=2:duration=longest:dropout_transition=0[a2]; \
+              \
+              [0:v:3]scale=1280:720:eval=frame[ov3]; \
+              [7:v][ov3]overlay=shortest=0:eof_action=pass[v3]; \
+              [0:a:3][8:a]amix=inputs=2:duration=longest:dropout_transition=0[a3] \
+              "
+
+            ##### SCREEN #####
+            -map [v0] -map [a0] \
+            -c:v libx264 -preset veryfast -tune zerolatency \
+            -g 60 -keyint_min 60 -sc_threshold 0 \
             -c:a aac -b:a 128k -ar 48000 \
             -f hls -hls_time 2 -hls_list_size 3 -hls_flags delete_segments+independent_segments \
             -hls_segment_filename "/hls/screen_%05d.ts" /hls/screen.m3u8 \
