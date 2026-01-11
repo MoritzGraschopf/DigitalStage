@@ -960,6 +960,11 @@ wss.on("connection", (ws) => {
                 if (!consumer) throw new Error("consumer not found");
 
                 await consumer.resume();
+                for (let i = 0; i < 5; i++) {
+                    setTimeout(() => {
+                        consumer.requestKeyFrame().catch(() => {});
+                    }, i * 400);
+                }
                 respond(ws, requestId, null);
             } catch (e) {
                 respondError(ws, requestId, e);
