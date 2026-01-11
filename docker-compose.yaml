@@ -91,23 +91,19 @@ services:
             -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=48000 \
             -f lavfi -i color=c=black:s=1280x720:r=30 \
             -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=48000 \
-            -filter_complex "\
-              [0:v:0]scale=1920:1080:eval=frame[rtp_v0]; \
-              [1:v][rtp_v0]overlay=shortest=0:eof_action=pass[v0]; \
-              [0:a:0][2:a]amix=inputs=2:duration=longest:dropout_transition=0[a0]; \
-              \
-              [0:v:1]scale=1280:720:eval=frame[rtp_v1]; \
-              [3:v][rtp_v1]overlay=shortest=0:eof_action=pass[v1]; \
-              [0:a:1][4:a]amix=inputs=2:duration=longest:dropout_transition=0[a1]; \
-              \
-              [0:v:2]scale=1280:720:eval=frame[rtp_v2]; \
-              [5:v][rtp_v2]overlay=shortest=0:eof_action=pass[v2]; \
-              [0:a:2][6:a]amix=inputs=2:duration=longest:dropout_transition=0[a2]; \
-              \
-              [0:v:3]scale=1280:720:eval=frame[rtp_v3]; \
-              [7:v][rtp_v3]overlay=shortest=0:eof_action=pass[v3]; \
-              [0:a:3][8:a]amix=inputs=2:duration=longest:dropout_transition=0[a3] \
-            "
+            -filter_complex "
+              color=c=black:s=1280x720:r=30[base];
+              [0:v]setpts=PTS-STARTPTS,scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2[v0];
+              [2:v]setpts=PTS-STARTPTS,scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2[v1];
+              [4:v]setpts=PTS-STARTPTS,scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2[v2];
+              [6:v]setpts=PTS-STARTPTS,scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2[v3];
+              
+              [base][v0]overlay=0:0[tmp1];
+              [tmp1][v1]overlay=640:0[tmp2];
+              [tmp2][v2]overlay=0:360[tmp3];
+              [tmp3][v3]overlay=640:360[vout]
+              "
+            -map "[vout]"
 
             ##### SCREEN #####
             -map [v0] -map [a0] \
