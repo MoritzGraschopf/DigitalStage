@@ -311,12 +311,13 @@ function HLSViewer({
         organizer: false,
     });
 
-    // HLS-URLs konstruieren
+    // HLS-URLs konstruieren mit Cache-Busting für Playlists
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-    const screenUrl = `${baseUrl}/hls/screen.m3u8`;
-    const presenterUrl = `${baseUrl}/hls/presenter.m3u8`;
-    const questionerUrl = `${baseUrl}/hls/questioner.m3u8`;
-    const organizerUrl = `${baseUrl}/hls/organizer.m3u8`;
+    const session = useMemo(() => Date.now(), []);
+    const screenUrl = `${baseUrl}/hls/screen.m3u8?session=${session}`;
+    const presenterUrl = `${baseUrl}/hls/presenter.m3u8?session=${session}`;
+    const questionerUrl = `${baseUrl}/hls/questioner.m3u8?session=${session}`;
+    const organizerUrl = `${baseUrl}/hls/organizer.m3u8?session=${session}`;
     
     // Bestimme welche Streams angezeigt werden sollen
     const isOrganizerPresenter = currentPresenter?.id === organizerId;
@@ -349,6 +350,9 @@ function HLSViewer({
     useEffect(() => {
         if (!hasHls) return;
 
+        // Refs für HLS-Instanzen (für Cleanup)
+        const hlsInstancesRef = new Map<string, HlsType>();
+
         const loadHls = async () => {
             // Prüfe ob HLS.js verfügbar ist (für Browser ohne native HLS-Unterstützung)
             let HlsClass: typeof HlsType | null = null;
@@ -369,6 +373,19 @@ function HLSViewer({
                 streamKey: 'screen' | 'presenter' | 'questioner' | 'organizer' | null = null
             ) => {
                 if (!element) return;
+
+                // Cleanup alte HLS-Instanz für dieses Element
+                const oldHls = hlsInstancesRef.get(streamKey || 'unknown');
+                if (oldHls) {
+                    oldHls.destroy();
+                    hlsInstancesRef.delete(streamKey || 'unknown');
+                }
+                // Video-Element zurücksetzen
+                if (element instanceof HTMLVideoElement) {
+                    element.pause();
+                    element.src = '';
+                    element.load();
+                }
 
                 const checkStreamActive = (videoEl: HTMLVideoElement) => {
                     if (!streamKey || !(videoEl instanceof HTMLVideoElement)) return;
@@ -409,6 +426,10 @@ function HLSViewer({
                         enableWorker: false,
                         lowLatencyMode: true,
                     });
+                    // HLS-Instanz speichern für Cleanup
+                    if (streamKey) {
+                        hlsInstancesRef.set(streamKey, hls);
+                    }
                     hls.loadSource(url);
                     hls.attachMedia(element);
                     hls.on(HlsClass.Events.MANIFEST_PARSED, () => {
