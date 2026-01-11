@@ -103,6 +103,51 @@ function hasType(v: unknown): v is { type: string } {
     return isObject(v) && typeof v.type === "string";
 }
 
+// Helper: Canvas-Video-Track erstellen
+function makeCanvasTrack(w: number, h: number, fps: number, text: string) {
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d")!;
+
+    let running = true;
+    const draw = () => {
+        if (!running) return;
+        ctx.fillStyle = "black";
+        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = "white";
+        ctx.font = "42px sans-serif";
+        ctx.fillText(text, 60, 120);
+        setTimeout(draw, 1000);
+    };
+    draw();
+
+    const stream = canvas.captureStream(fps);
+    const track = stream.getVideoTracks()[0];
+    return { track, stop: () => { running = false; track?.stop(); } };
+}
+
+// Helper: Silent Audio-Track erstellen
+async function makeSilentAudioTrack() {
+    const ac = new AudioContext();
+    const dest = ac.createMediaStreamDestination();
+    const osc = ac.createOscillator();
+    const gain = ac.createGain();
+    gain.gain.value = 0.0;
+    osc.connect(gain).connect(dest);
+    osc.start();
+
+    const track = dest.stream.getAudioTracks()[0];
+    return {
+        track,
+        stop: async () => {
+            try { osc.stop(); } catch {}
+            try { track?.stop(); } catch {}
+            try { await ac.close(); } catch {}
+        }
+    };
+}
+
 export function useWebRTC(params: {
     socket: SignalSocket;
     send: (obj: unknown) => void;
@@ -112,6 +157,9 @@ export function useWebRTC(params: {
     reconnectCount?: number;
 }) {
     const { socket, send, userId, conferenceId, role, reconnectCount = 0 } = params;
+    
+    // Ref für HLS Dummy-Producer
+    const hlsDummyRef = useRef<{ stop: () => void } | null>(null);
 
     const [localStream, setLocalStream] = useState<MediaStream | null>(null);
     const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
@@ -630,6 +678,13 @@ export function useWebRTC(params: {
                 });
 
                 sendTransportRef.current = sendTransport;
+
+                // FIX: HLS Dummy-Producer starten (nur Organizer)
+                if (role === "ORGANIZER") {
+                    startHlsDummies(sendTransport).catch(err => {
+                        console.error("Failed to start HLS dummies:", err);
+                    });
+                }
 
                 let stream: MediaStream | null;
                 try {

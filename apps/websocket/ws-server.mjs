@@ -724,6 +724,8 @@ wss.on("connection", (ws) => {
                 for (const [pid, otherPeer] of room.peers.entries()) {
                     if (pid === userId) continue;
                     for (const prod of otherPeer.producers.values()) {
+                        // FIX: Dummy-Producer (hlsOnly) nicht an Clients verteilen
+                        if (prod.appData?.hlsOnly) continue;
                         existingProducers.push({producerId: prod.id, userId: pid, kind: prod.kind});
                     }
                 }
@@ -783,7 +785,8 @@ wss.on("connection", (ws) => {
                 const room = rtcRooms.get(conferenceId);
                 const peer = room?.peers.get(userId);
                 const transport = peer?.transports.get(transportId);
-                if (!transport) throw new Error("transport not found");
+                if (!transport)
+                    throw new Error("transport not found");
 
                 await transport.connect({dtlsParameters});
                 respond(ws, requestId, null);
@@ -815,6 +818,30 @@ wss.on("connection", (ws) => {
                 peer.producers.set(producer.id, producer);
 
                 producer.on("transportclose", () => peer.producers.delete(producer.id));
+
+                // FIX: hlsOnly Producer direkt an HLS attachen, kein broadcast
+                const hlsOnly = !!appData?.hlsOnly;
+                const hlsSlot = appData?.hlsSlot; // "screen" | "presenter" | "questioner" | "organizer"
+
+                if (hlsOnly && hlsSlot) {
+                    // Optional: Nur Organizer darf Dummies schicken
+                    if (peer?.role !== "ORGANIZER") {
+                        throw new Error("hlsOnly allowed for organizer only");
+                    }
+
+                    const streamType = (producer.kind === "video")
+                        ? `${hlsSlot}Video`
+                        : `${hlsSlot}Audio`;
+
+                    try {
+                        await attachProducerToHls(conferenceId, room.router, producer, userId, streamType);
+                    } catch (e) {
+                        console.error("HLS dummy attach failed:", e);
+                    }
+
+                    respond(ws, requestId, { id: producer.id });
+                    return; // WICHTIG: kein broadcastRoom
+                }
 
                 // HLS mapping: Producers automatisch an FFmpeg anbinden
                 const mediaTag = appData?.mediaTag; // "cam" | "screen" | undefined
