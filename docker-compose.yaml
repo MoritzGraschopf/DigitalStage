@@ -69,67 +69,57 @@ services:
         - "5004-5104:5004-5104/udp"
       command:
         - |
-          set -e
+          set +e
           until [ -s /sdp/input.sdp ]; do
-            echo "waiting for sdp"
-            sleep 1
+          echo "waiting for sdp"
+          sleep 1
           done
           
-          exec ffmpeg -hide_banner -loglevel warning \
-            -protocol_whitelist file,udp,rtp,lavfi \
-            -analyzeduration 5M \
-            -probesize 5M \
-            -fflags nobuffer \
-            -flags low_delay \
-            -rw_timeout 0 \
-            -i /sdp/input.sdp \
-            -f lavfi -i color=c=black:s=1920x1080:r=30 \
-            -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=48000 \
-            -f lavfi -i color=c=black:s=1280x720:r=30 \
-            -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=48000 \
-            -f lavfi -i color=c=black:s=1280x720:r=30 \
-            -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=48000 \
-            -f lavfi -i color=c=black:s=1280x720:r=30 \
-            -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=48000 \
-            -filter_complex "
+          while true; do
+            echo "[ffmpeg] trying LIVE..."
+            sh -c 'PASTE_HERE_THE_LIVE_COMMAND_ABOVE' && exit 0
+          
+            echo "[ffmpeg] LIVE failed (likely no packets / no keyframe) -> PLACEHOLDER 10s"
+          
+              ffmpeg -hide_banner -loglevel warning -t 10 \
+              -re -f lavfi -i "color=c=black:s=640x360:r=30" \
+              -re -f lavfi -i "color=c=black:s=640x360:r=30" \
+              -re -f lavfi -i "color=c=black:s=640x360:r=30" \
+              -re -f lavfi -i "color=c=black:s=640x360:r=30" \
+              -f lavfi -i "anullsrc=channel_layout=stereo:sample_rate=48000" \
+              -filter_complex "
               color=c=black:s=1280x720:r=30[base];
-              [0:v]setpts=PTS-STARTPTS,scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2[v0];
-              [2:v]setpts=PTS-STARTPTS,scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2[v1];
-              [4:v]setpts=PTS-STARTPTS,scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2[v2];
-              [6:v]setpts=PTS-STARTPTS,scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2[v3];
-              
+              [0:v]setpts=PTS-STARTPTS[v0];
+              [1:v]setpts=PTS-STARTPTS[v1];
+              [2:v]setpts=PTS-STARTPTS[v2];
+              [3:v]setpts=PTS-STARTPTS[v3];
               [base][v0]overlay=0:0[tmp1];
               [tmp1][v1]overlay=640:0[tmp2];
               [tmp2][v2]overlay=0:360[tmp3];
-              [tmp3][v3]overlay=640:360[vout]
-              "
-            -map "[vout]"
-
-            ##### SCREEN #####
-            -map [v0] -map [a0] \
-            -c:v libx264 -preset veryfast -tune zerolatency \
-            -g 60 -keyint_min 60 -sc_threshold 0 \
-            -c:a aac -b:a 128k -ar 48000 \
-            -f hls -hls_time 2 -hls_list_size 3 -hls_flags delete_segments+independent_segments \
-            -hls_segment_filename "/hls/screen_%05d.ts" /hls/screen.m3u8 \
-            \
-            -map "[v1]" -map "[a1]" \
-            -c:v libx264 -preset veryfast -tune zerolatency -g 60 -keyint_min 60 -sc_threshold 0 \
-            -c:a aac -b:a 128k -ar 48000 \
-            -f hls -hls_time 2 -hls_list_size 3 -hls_flags delete_segments+independent_segments \
-            -hls_segment_filename "/hls/presenter_%05d.ts" /hls/presenter.m3u8 \
-            \
-            -map "[v2]" -map "[a2]" \
-            -c:v libx264 -preset veryfast -tune zerolatency -g 60 -keyint_min 60 -sc_threshold 0 \
-            -c:a aac -b:a 128k -ar 48000 \
-            -f hls -hls_time 2 -hls_list_size 3 -hls_flags delete_segments+independent_segments \
-            -hls_segment_filename "/hls/questioner_%05d.ts" /hls/questioner.m3u8 \
-            \
-            -map "[v3]" -map "[a3]" \
-            -c:v libx264 -preset veryfast -tune zerolatency -g 60 -keyint_min 60 -sc_threshold 0 \
-            -c:a aac -b:a 128k -ar 48000 \
-            -f hls -hls_time 2 -hls_list_size 3 -hls_flags delete_segments+independent_segments \
-            -hls_segment_filename "/hls/organizer_%05d.ts" /hls/organizer.m3u8
+              [tmp3][v3]overlay=640:360[vgrid];
+              [4:a]asplit=4[a0][a1][a2][a3]
+              " \
+              -map "[v0]" -map "[a0]" -c:v libx264 -preset veryfast -tune zerolatency -g 60 -keyint_min 60 -sc_threshold 0 \
+              -c:a aac -b:a 128k -ar 48000 \
+              -f hls -hls_time 2 -hls_list_size 3 -hls_flags delete_segments+independent_segments \
+              -hls_segment_filename "/hls/screen_%05d.ts" "/hls/screen.m3u8" \
+              -map "[v1]" -map "[a1]" -c:v libx264 -preset veryfast -tune zerolatency -g 60 -keyint_min 60 -sc_threshold 0 \
+              -c:a aac -b:a 128k -ar 48000 \
+              -f hls -hls_time 2 -hls_list_size 3 -hls_flags delete_segments+independent_segments \
+              -hls_segment_filename "/hls/presenter_%05d.ts" "/hls/presenter.m3u8" \
+              -map "[v2]" -map "[a2]" -c:v libx264 -preset veryfast -tune zerolatency -g 60 -keyint_min 60 -sc_threshold 0 \
+              -c:a aac -b:a 128k -ar 48000 \
+              -f hls -hls_time 2 -hls_list_size 3 -hls_flags delete_segments+independent_segments \
+              -hls_segment_filename "/hls/questioner_%05d.ts" "/hls/questioner.m3u8" \
+              -map "[v3]" -map "[a3]" -c:v libx264 -preset veryfast -tune zerolatency -g 60 -keyint_min 60 -sc_threshold 0 \
+              -c:a aac -b:a 128k -ar 48000 \
+              -f hls -hls_time 2 -hls_list_size 3 -hls_flags delete_segments+independent_segments \
+              -hls_segment_filename "/hls/organizer_%05d.ts" "/hls/organizer.m3u8" \
+              -map "[vgrid]" -an -c:v libx264 -preset veryfast -tune zerolatency -g 60 -keyint_min 60 -sc_threshold 0 \
+              -f hls -hls_time 2 -hls_list_size 3 -hls_flags delete_segments+independent_segments \
+              -hls_segment_filename "/hls/grid_%05d.ts" "/hls/grid.m3u8"
+            sleep 1
+          done
 
 
 
