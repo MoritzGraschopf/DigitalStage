@@ -104,6 +104,7 @@ function hasType(v: unknown): v is { type: string } {
 }
 
 // Helper: Canvas-Video-Track erstellen
+ 
 function makeCanvasTrack(w: number, h: number, fps: number, text: string) {
     const canvas = document.createElement("canvas");
     canvas.width = w;
@@ -128,6 +129,7 @@ function makeCanvasTrack(w: number, h: number, fps: number, text: string) {
 }
 
 // Helper: Silent Audio-Track erstellen
+ 
 async function makeSilentAudioTrack() {
     const ac = new AudioContext();
     const dest = ac.createMediaStreamDestination();
@@ -219,6 +221,52 @@ export function useWebRTC(params: {
             servers.push({ urls: stun });
         return servers;
     }, []);
+
+    // ----- HLS Dummy-Producer Funktionen
+    const startHlsDummies = useCallback(async (sendTransport: Transport) => {
+        // Nur Organizer
+        if (role !== "ORGANIZER") return;
+        if (hlsDummyRef.current) return;
+
+        const screen = makeCanvasTrack(1920, 1080, 5, "Warte auf Bildschirmfreigabe");
+        const tile = makeCanvasTrack(1280, 720, 5, "Warte auf Teilnehmer");
+        const audio = await makeSilentAudioTrack();
+
+        const prods: Producer[] = [];
+
+        const produceSlot = async (
+            slot: "screen" | "presenter" | "questioner" | "organizer",
+            v: MediaStreamTrack,
+            a: MediaStreamTrack
+        ) => {
+            prods.push(await sendTransport.produce({
+                track: v,
+                encodings: [{ maxBitrate: 80_000, maxFramerate: 5 }],
+                appData: { hlsOnly: true, hlsSlot: slot, source: "dummy" },
+            }));
+            prods.push(await sendTransport.produce({
+                track: a,
+                appData: { hlsOnly: true, hlsSlot: slot, source: "dummy" },
+            }));
+        };
+
+        // Mehrere Producer brauchen eigene Tracks → clone()
+        await produceSlot("screen", screen.track, audio.track.clone());
+        await produceSlot("presenter", tile.track.clone(), audio.track.clone());
+        await produceSlot("questioner", tile.track.clone(), audio.track.clone());
+        await produceSlot("organizer", tile.track.clone(), audio.track.clone());
+
+        hlsDummyRef.current = {
+            stop: () => {
+                for (const p of prods) {
+                    try { p.close(); } catch {}
+                }
+                screen.stop();
+                tile.stop();
+                audio.stop();
+            }
+        };
+    }, [role]);
 
     // ----- consume helper
     const consumedRef = useRef<Map<string, string>>(new Map());
@@ -741,6 +789,9 @@ export function useWebRTC(params: {
         return () => {
             mounted = false;
             initKeyRef.current = null;
+            // Cleanup HLS Dummies
+            hlsDummyRef.current?.stop();
+            hlsDummyRef.current = null;
             sendTransportRef.current?.close();
             recvTransportRef.current?.close();
             sendTransportRef.current = null;
@@ -784,7 +835,7 @@ export function useWebRTC(params: {
 
             request<null>("sfu:leave").catch(() => {});
         };
-    }, [userId, conferenceId, role, consume, request, processPendingNewProducers, iceServers, reconnectCount]);
+    }, [userId, conferenceId, role, consume, request, processPendingNewProducers, iceServers, reconnectCount, startHlsDummies]);
 
     // Lokalen Mikrofon-Status tracken
     useEffect(() => {
