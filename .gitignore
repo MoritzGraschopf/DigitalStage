@@ -50,3 +50,5 @@ next-env.d.ts
 /apps/websocket/node_modules/
 /apps/web/.next/
 /apps/web/node_modules/
+
+/hls
