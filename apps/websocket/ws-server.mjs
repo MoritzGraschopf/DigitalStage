@@ -398,6 +398,8 @@ async function initHlsForConference(conferenceId, router) {
             organizerVideo: null,
             organizerAudio: null,
         },
+        ready: new Set(),
+        sdpWritten: false,
     };
 
     hlsIngest.set(conferenceId, state);
@@ -421,7 +423,10 @@ async function attachProducerToHls(conferenceId, router, producer, userId, strea
 
     // Alten Consumer schließen
     if (ingest.consumers[streamType]) {
-        try { ingest.consumers[streamType].close(); } catch {}
+        try {
+            ingest.consumers[streamType].close();
+        } catch {}
+
         ingest.consumers[streamType] = null;
     }
 
@@ -438,6 +443,13 @@ async function attachProducerToHls(conferenceId, router, producer, userId, strea
     });
 
     ingest.consumers[streamType] = consumer;
+    ingest.ready.add(streamType);
+
+    if (!ingest.sdpWritten && ingest.ready.size >= 8) {
+        writeSdp("/sdp/input.sdp");
+        ingest.sdpWritten = true;
+        console.log("✅ All 8 RTP streams ready — wrote /sdp/input.sdp");
+    }
 
     if (consumer.kind === "video") {
         await consumer.requestKeyFrame();
