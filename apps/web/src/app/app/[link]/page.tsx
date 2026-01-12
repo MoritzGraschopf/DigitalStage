@@ -313,11 +313,10 @@ function HLSViewer({
 
     // HLS-URLs konstruieren mit Cache-Busting für Playlists
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-    const session = useMemo(() => Date.now(), []);
-    const screenUrl = `${baseUrl}/hls/screen.m3u8?session=${session}`;
-    const presenterUrl = `${baseUrl}/hls/presenter.m3u8?session=${session}`;
-    const questionerUrl = `${baseUrl}/hls/questioner.m3u8?session=${session}`;
-    const organizerUrl = `${baseUrl}/hls/organizer.m3u8?session=${session}`;
+    const screenUrl = `${baseUrl}/hls/screen.m3u8`;
+    const presenterUrl = `${baseUrl}/hls/presenter.m3u8`;
+    const questionerUrl = `${baseUrl}/hls/questioner.m3u8`;
+    const organizerUrl = `${baseUrl}/hls/organizer.m3u8`;
     
     // Bestimme welche Streams angezeigt werden sollen
     const isOrganizerPresenter = currentPresenter?.id === organizerId;
