@@ -5,9 +5,9 @@ on:
     branches: [ "main" ]
 
 env:
-  REGISTRY: digitalstage.liveroom.at
-  APP_IMAGE: digitalstage.liveroom.at/digitalstage-app
-  WS_IMAGE: digitalstage.liveroom.at/digitalstage-websocket
+  REGISTRY: notsayo.me
+  APP_IMAGE: notsayo.me/digitalstage-app
+  WS_IMAGE: notsayo.me/digitalstage-websocket
 
 jobs:
   build-and-push:

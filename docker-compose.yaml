@@ -1,6 +1,6 @@
 services:
     app:
-        image: digitalstage.liveroom.at/digitalstage-app:latest
+        image: notsayo.me/digitalstage-app:latest
         container_name: digitalstage_app
         restart: unless-stopped
         env_file: [ .env ]
@@ -11,7 +11,7 @@ services:
         command: sh -c "npx prisma migrate deploy && npm start"
 
     websocket:
-        image: digitalstage.liveroom.at/digitalstage-websocket:latest
+        image: notsayo.me/digitalstage-websocket:latest
         container_name: digitalstage_websocket
         restart: unless-stopped
         env_file: [ .env ]
@@ -21,7 +21,7 @@ services:
             - /opt/digitalstage/sdp:/sdp
         ports:
             - "3010:3010"
-            - "40000-40100:40000-40100"
+            - "10004-10100:10004-10100"
         extra_hosts:
           - "host.docker.internal:host-gateway"
         environment:
