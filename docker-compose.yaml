@@ -22,6 +22,10 @@ services:
         ports:
             - "3010:3010"
             - "40000-40100:40000-40100"
+        extra_hosts:
+          - "host.docker.internal:host-gateway"
+        environment:
+          - FFMPEG_HOST=host.docker.internal
         command: ["node", "ws-server.mjs"]
 
     db:
@@ -56,67 +60,6 @@ services:
             - caddy-data:/data
             - caddy-config:/config
         depends_on: [ app, registry ]
-
-    ffmpeg:
-      image: jrottenberg/ffmpeg:6.1-alpine
-      container_name: digitalstage_ffmpeg
-      restart: unless-stopped
-      volumes:
-        - /opt/digitalstage/hls:/hls
-        - /opt/digitalstage/sdp:/sdp
-      entrypoint: [ "/bin/sh","-c" ]
-      command: |
-        set -eu
-        mkdir -p /hls
-        until [ -s /sdp/input.sdp ]; do
-          echo "waiting for sdp"
-          sleep 0.5
-        done
-
-        # restart-loop statt einmal sterben und Docker nerven
-        while true; do
-          ffmpeg -hide_banner -loglevel warning \
-            -protocol_whitelist file,udp,rtp \
-            -analyzeduration 10M -probesize 10M \
-            -fflags nobuffer -flags low_delay \
-            -i /sdp/input.sdp \
-            \
-            -map 0:v:0 -map 0:a:0 \
-            -c:v libx264 -preset veryfast -tune zerolatency \
-            -g 60 -keyint_min 60 -sc_threshold 0 \
-            -c:a aac -b:a 128k -ar 48000 \
-            -f hls -hls_time 2 -hls_list_size 3 \
-            -hls_flags delete_segments+independent_segments \
-            -hls_segment_filename "/hls/screen_%05d.ts" /hls/screen.m3u8 \
-            \
-            -map 0:v:1 -map 0:a:1 \
-            -c:v libx264 -preset veryfast -tune zerolatency \
-            -g 60 -keyint_min 60 -sc_threshold 0 \
-            -c:a aac -b:a 128k -ar 48000 \
-            -f hls -hls_time 2 -hls_list_size 3 \
-            -hls_flags delete_segments+independent_segments \
-            -hls_segment_filename "/hls/presenter_%05d.ts" /hls/presenter.m3u8 \
-            \
-            -map 0:v:2 -map 0:a:2 \
-            -c:v libx264 -preset veryfast -tune zerolatency \
-            -g 60 -keyint_min 60 -sc_threshold 0 \
-            -c:a aac -b:a 128k -ar 48000 \
-            -f hls -hls_time 2 -hls_list_size 3 \
-            -hls_flags delete_segments+independent_segments \
-            -hls_segment_filename "/hls/questioner_%05d.ts" /hls/questioner.m3u8 \
-            \
-            -map 0:v:3 -map 0:a:3 \
-            -c:v libx264 -preset veryfast -tune zerolatency \
-            -g 60 -keyint_min 60 -sc_threshold 0 \
-            -c:a aac -b:a 128k -ar 48000 \
-            -f hls -hls_time 2 -hls_list_size 3 \
-            -hls_flags delete_segments+independent_segments \
-            -hls_segment_filename "/hls/organizer_%05d.ts" /hls/organizer.m3u8
-          echo "ffmpeg exited ($?), restarting in 1s"
-          sleep 1
-        done
-
-
 
 volumes:
   db-data:
