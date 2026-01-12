@@ -354,18 +354,17 @@ async function initHlsForConference(conferenceId, router) {
 
     await ensureDir("/sdp");
 
-    const ffmpegHostname = process.env.FFMPEG_HOST || "digitalstage_ffmpeg";
-    let targetIp = process.env.FFMPEG_IP || "127.0.0.1";
+    const ffmpegHostname = process.env.FFMPEG_HOST || "host.docker.internal";
 
+    let targetIp;
     try {
-        const res = await dns.promises.lookup(ffmpegHostname, {family: 4});
-        targetIp = res.address;
-        console.log(`✅ Resolved FFmpeg hostname '${ffmpegHostname}' to IP: ${targetIp}`);
-    } catch {
-        console.warn(`⚠️  FFmpeg DNS failed, using fallback IP ${targetIp}`);
+        targetIp = (await dns.promises.lookup(ffmpegHostname, { family: 4 })).address;
+        console.log(`✅ FFmpeg target: ${ffmpegHostname} → ${targetIp}`);
+    } catch (e) {
+        console.error(`❌ FFmpeg DNS failed for ${ffmpegHostname}:`, e);
+        throw e;
     }
 
-    // Port-Zuordnung basierend auf Anforderung:
     // Screen: Video 5004, Audio 5006
     // Presenter: Video 5008, Audio 5010
     // Questioner: Video 5012, Audio 5014
