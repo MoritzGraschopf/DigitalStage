@@ -19,7 +19,7 @@ services:
       - /opt/digitalstage/hls:/srv/hls:ro
       - caddy-data:/data
       - caddy-config:/config
-    depends_on: [ app, registry ]
+    depends_on: [ registry ]
 
 volumes:
   registry-data:
