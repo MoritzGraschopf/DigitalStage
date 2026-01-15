@@ -1,0 +1,27 @@
+services:
+  registry:
+    image: registry:2
+    container_name: digitalstage_registry
+    restart: unless-stopped
+    expose: [ "5000" ]
+    volumes:
+      - registry-data:/var/lib/registry
+
+  caddy:
+    image: caddy:2
+    container_name: digitalstage_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - /opt/digitalstage/hls:/srv/hls:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [ app, registry ]
+
+volumes:
+  registry-data:
+  caddy-data:
+  caddy-config:
