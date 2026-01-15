@@ -52,17 +52,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Setup SSH key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          printf "Host server\n  HostName %s\n  User %s\n  IdentityFile ~/.ssh/id_ed25519\n  StrictHostKeyChecking no\n" \
-            "${{ secrets.SERVER_HOST }}" "${{ secrets.SERVER_USER }}" >> ~/.ssh/config
+      - name: Add SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SERVER_SSH_KEY }}
 
-      - name: Deploy via SSH (force git + docker compose + registry cleanup)
+      - name: SSH sanity check
         run: |
-          ssh server << 'EOF'
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "whoami && hostname"
+
+      - name: Deploy via SSH (git + compose + cleanup)
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} 'bash -s' << EOF
           set -euo pipefail
 
           cd /opt/digitalstage
@@ -71,8 +72,8 @@ jobs:
           git fetch origin
           git reset --hard origin/main
 
-          echo ">>> Rewriting .env from GitHub Secrets..."
-          cat > .env << 'ENVEOF'
+          echo ">>> Writing .env..."
+          cat > .env << ENVEOF
           DATABASE_URL=${{ secrets.DATABASE_URL }}
           JWT_SECRET=${{ secrets.JWT_SECRET }}
           NEXT_PUBLIC_WS_URL=${{ secrets.NEXT_PUBLIC_WS_URL }}
@@ -86,6 +87,9 @@ jobs:
           ENVEOF
           chmod 600 .env
 
+          echo ">>> Login to registry (for docker pull)..."
+          echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login digitalstage.liveroom.at -u "${{ secrets.REGISTRY_USER }}" --password-stdin
+
           echo ">>> Pulling latest images..."
           docker compose -f docker-compose.yaml pull
 
@@ -95,7 +99,6 @@ jobs:
           echo ">>> Cleaning old Docker resources on server..."
           docker container prune -f
           docker image prune -a -f --filter "until=168h"
-          docker image prune -f
           docker builder prune -a -f
 
           echo ">>> Deployment finished successfully."
