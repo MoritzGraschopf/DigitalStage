@@ -381,6 +381,7 @@ async function initHlsForConference(conferenceId, router) {
     };
     
     // SDP-Datei schreiben (einmalig bei Init, damit FFmpeg starten kann)
+    // WICHTIG: FFmpeg lädt SDP nur beim Start - späteres Rewriting bringt nichts
     writeSdp("/sdp/input.sdp");
 
     const state = {
@@ -398,7 +399,7 @@ async function initHlsForConference(conferenceId, router) {
             organizerAudio: null,
         },
         ready: new Set(),
-        sdpWritten: false,
+        sdpWritten: true, // SDP wird sofort geschrieben, nicht erst bei ready.size >= 8
     };
 
     hlsIngest.set(conferenceId, state);
@@ -408,6 +409,92 @@ async function initHlsForConference(conferenceId, router) {
 
 function startFfmpeg(conferenceId) {
     console.log("🚀 Starting FFmpeg for conference", conferenceId);
+}
+
+// Helper: Findet den richtigen Producer für ein Stream-Type
+function pickProducer(peer, { kind, mediaTag }) {
+    if (!peer) return null;
+    for (const p of peer.producers.values()) {
+        if (p.kind !== kind) continue;
+        if (p.appData?.hlsOnly) continue;          // Dummies überspringen
+        if (mediaTag && p.appData?.mediaTag !== mediaTag) continue;
+        if (mediaTag === "cam" && p.appData?.mediaTag === "screen") continue;
+        return p;
+    }
+    return null;
+}
+
+// Rebind HLS bindings wenn sich Rollen ändern (PresenterChanged, etc.)
+async function refreshHlsBindings(conferenceId) {
+    const room = rtcRooms.get(conferenceId);
+    if (!room) return;
+
+    const presenterId = presenterByConf.get(conferenceId) || null;
+    const organizerId = organizerByConf.get(conferenceId) || null;
+
+    // HLS state sicherstellen
+    await initHlsForConference(conferenceId, room.router);
+
+    // Presenter cam/audio
+    if (presenterId) {
+        const presenterPeer = room.peers.get(presenterId);
+        const camV = pickProducer(presenterPeer, { kind: "video", mediaTag: "cam" });
+        const camA = pickProducer(presenterPeer, { kind: "audio" });
+
+        if (camV) {
+            await attachProducerToHls(conferenceId, room.router, camV, presenterId, "presenterVideo").catch(err => 
+                console.error("refreshHlsBindings presenterVideo failed:", err));
+        }
+        if (camA) {
+            await attachProducerToHls(conferenceId, room.router, camA, presenterId, "presenterAudio").catch(err => 
+                console.error("refreshHlsBindings presenterAudio failed:", err));
+            // "Master-Audio" immer vom Presenter in screenAudio spiegeln
+            await attachProducerToHls(conferenceId, room.router, camA, presenterId, "screenAudio").catch(err => 
+                console.error("refreshHlsBindings screenAudio failed:", err));
+        }
+
+        // Presenter screen video (falls vorhanden)
+        const screenV = pickProducer(presenterPeer, { kind: "video", mediaTag: "screen" });
+        if (screenV) {
+            await attachProducerToHls(conferenceId, room.router, screenV, presenterId, "screenVideo").catch(err => 
+                console.error("refreshHlsBindings screenVideo failed:", err));
+        }
+    }
+
+    // Organizer cam/audio (wenn Organizer != Presenter)
+    if (organizerId && organizerId !== presenterId) {
+        const organizerPeer = room.peers.get(organizerId);
+        const camV = pickProducer(organizerPeer, { kind: "video", mediaTag: "cam" });
+        const camA = pickProducer(organizerPeer, { kind: "audio" });
+
+        if (camV) {
+            await attachProducerToHls(conferenceId, room.router, camV, organizerId, "organizerVideo").catch(err => 
+                console.error("refreshHlsBindings organizerVideo failed:", err));
+        }
+        if (camA) {
+            await attachProducerToHls(conferenceId, room.router, camA, organizerId, "organizerAudio").catch(err => 
+                console.error("refreshHlsBindings organizerAudio failed:", err));
+        }
+    }
+
+    // Questioner cam/audio
+    for (const [userId, peer] of room.peers.entries()) {
+        if (peer.role === "QUESTIONER") {
+            const camV = pickProducer(peer, { kind: "video", mediaTag: "cam" });
+            const camA = pickProducer(peer, { kind: "audio" });
+
+            if (camV) {
+                await attachProducerToHls(conferenceId, room.router, camV, userId, "questionerVideo").catch(err => 
+                    console.error("refreshHlsBindings questionerVideo failed:", err));
+            }
+            if (camA) {
+                await attachProducerToHls(conferenceId, room.router, camA, userId, "questionerAudio").catch(err => 
+                    console.error("refreshHlsBindings questionerAudio failed:", err));
+            }
+        }
+    }
+
+    console.log(`✅ HLS bindings refreshed for conference ${conferenceId}`);
 }
 
 async function attachProducerToHls(conferenceId, router, producer, userId, streamType) {
@@ -444,11 +531,8 @@ async function attachProducerToHls(conferenceId, router, producer, userId, strea
     ingest.consumers[streamType] = consumer;
     ingest.ready.add(streamType);
 
-    if (!ingest.sdpWritten && ingest.ready.size >= 8) {
-        writeSdp("/sdp/input.sdp");
-        ingest.sdpWritten = true;
-        console.log("✅ All 8 RTP streams ready — wrote /sdp/input.sdp");
-    }
+    // SDP wird bereits beim initHlsForConference geschrieben
+    // (FFmpeg lädt SDP nur beim Start, späteres Rewriting bringt nichts)
 
     if (consumer.kind === "video") {
         await consumer.requestKeyFrame();
@@ -653,6 +737,10 @@ wss.on("connection", (ws) => {
             } else {
                 presenterByConf.delete(msg.conferenceId);
             }
+            
+            // HLS-Bindings neu setzen, da sich die Rollen geändert haben
+            refreshHlsBindings(msg.conferenceId).catch(e => 
+                console.error("refreshHlsBindings failed after PresenterChanged:", e));
             
             wss.clients.forEach((client) => {
                 client.send(JSON.stringify({
@@ -877,10 +965,10 @@ wss.on("connection", (ws) => {
                         if (isQuestioner) {
                             // Questioner Video
                             await attachProducerToHls(conferenceId, room.router, producer, userId, "questionerVideo").catch(err => console.error("HLS Questioner Video attach failed:", err));
-                        } else if (isPresenter && !isOrganizerPresenter) {
-                            // Presenter Video (nur wenn Organizer ≠ Präsentator)
+                        } else if (isPresenter) {
+                            // Presenter Video (auch wenn Organizer = Präsentator)
                             await attachProducerToHls(conferenceId, room.router, producer, userId, "presenterVideo").catch(err => console.error("HLS Presenter Video attach failed:", err));
-                        } else if (isOrganizer && !isOrganizerPresenter) {
+                        } else if (isOrganizer) {
                             // Organizer Video (nur wenn Organizer ≠ Präsentator)
                             await attachProducerToHls(conferenceId, room.router, producer, userId, "organizerVideo").catch(err => console.error("HLS Organizer Video attach failed:", err));
                         }
@@ -890,17 +978,14 @@ wss.on("connection", (ws) => {
                     if (isQuestioner) {
                         // Questioner Audio
                         await attachProducerToHls(conferenceId, room.router, producer, userId, "questionerAudio").catch(err => console.error("HLS Questioner Audio attach failed:", err));
-                    } else if (isPresenter && !isOrganizerPresenter) {
-                        // Presenter Audio (nur wenn Organizer ≠ Präsentator)
+                    } else if (isPresenter) {
+                        // Presenter Audio (auch wenn Organizer = Präsentator)
                         await attachProducerToHls(conferenceId, room.router, producer, userId, "presenterAudio").catch(err => console.error("HLS Presenter Audio attach failed:", err));
-                        // Screen Audio auch vom Präsentator
+                        // Screen Audio auch vom Präsentator (Master-Audio)
                         await attachProducerToHls(conferenceId, room.router, producer, userId, "screenAudio").catch(err => console.error("HLS Screen Audio attach failed:", err));
-                    } else if (isOrganizer && !isOrganizerPresenter) {
+                    } else if (isOrganizer) {
                         // Organizer Audio (nur wenn Organizer ≠ Präsentator)
                         await attachProducerToHls(conferenceId, room.router, producer, userId, "organizerAudio").catch(err => console.error("HLS Organizer Audio attach failed:", err));
-                    } else if (isOrganizerPresenter) {
-                        // Organizer = Präsentator: nur Screen Audio
-                        await attachProducerToHls(conferenceId, room.router, producer, userId, "screenAudio").catch(err => console.error("HLS Screen Audio attach failed:", err));
                     }
                 }
 
