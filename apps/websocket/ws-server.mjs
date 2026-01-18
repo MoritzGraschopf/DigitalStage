@@ -414,7 +414,7 @@ function startFfmpeg(conferenceId) {
     console.log("🚀 Starting FFmpeg for conference", conferenceId);
 }
 
-// Helper: Findet den richtigen Producer für ein Stream-Type
+// Helper: Findet den richtigen Producer für ein Stream-Type (echte Producer, keine Dummies)
 function pickProducer(peer, { kind, mediaTag }) {
     if (!peer) return null;
     for (const p of peer.producers.values()) {
@@ -422,6 +422,18 @@ function pickProducer(peer, { kind, mediaTag }) {
         if (p.appData?.hlsOnly) continue;          // Dummies überspringen
         if (mediaTag && p.appData?.mediaTag !== mediaTag) continue;
         if (mediaTag === "cam" && p.appData?.mediaTag === "screen") continue;
+        return p;
+    }
+    return null;
+}
+
+// Helper: Findet Dummy-Producer für ein Stream-Type
+function pickDummyProducer(peer, { kind, hlsSlot }) {
+    if (!peer) return null;
+    for (const p of peer.producers.values()) {
+        if (p.kind !== kind) continue;
+        if (!p.appData?.hlsOnly) continue;         // Nur Dummies
+        if (p.appData?.hlsSlot !== hlsSlot) continue;
         return p;
     }
     return null;
@@ -451,29 +463,58 @@ async function refreshHlsBindings(confId) {
 
     const presenterPeer = presenterId ? room.peers.get(presenterId) : null;
     const questionerPeer = questionerId ? room.peers.get(questionerId) : null;
+    const organizerPeerForDummy = organizer?.peer || null;
+
+    // Helper: Bindet Producer oder Dummy für einen Slot
+    const bindSlot = async (streamType, realProducer, realUserId, dummySlot, kind) => {
+        if (realProducer && realUserId) {
+            await attachProducerToHls(confId, room.router, realProducer, realUserId, streamType).catch(err => 
+                console.error(`refreshHlsBindings ${streamType} failed:`, err));
+        } else if (organizerPeerForDummy && organizer) {
+            // Fallback: Dummy-Producer vom Organizer
+            const dummy = pickDummyProducer(organizerPeerForDummy, { kind, hlsSlot: dummySlot });
+            if (dummy) {
+                await attachProducerToHls(confId, room.router, dummy, organizer.uid, streamType).catch(err => 
+                    console.error(`refreshHlsBindings ${streamType} (dummy) failed:`, err));
+            }
+        }
+    };
 
     // Presenter cam/audio
     if (presenterId && presenterPeer) {
         const pCamV = pickProducer(presenterPeer, { kind: "video", mediaTag: "cam" });
         const pAud = pickProducer(presenterPeer, { kind: "audio" });
 
-        if (pCamV) {
-            await attachProducerToHls(confId, room.router, pCamV, presenterId, "presenterVideo").catch(err => 
-                console.error("refreshHlsBindings presenterVideo failed:", err));
-        }
+        await bindSlot("presenterVideo", pCamV, presenterId, "presenter", "video");
+        await bindSlot("presenterAudio", pAud, presenterId, "presenter", "audio");
+        
+        // ScreenAudio: nimm Presenter-Audio als Master (weil ScreenShare bei dir kein Audio sendet)
         if (pAud) {
-            await attachProducerToHls(confId, room.router, pAud, presenterId, "presenterAudio").catch(err => 
-                console.error("refreshHlsBindings presenterAudio failed:", err));
-            // ScreenAudio: nimm Presenter-Audio als Master (weil ScreenShare bei dir kein Audio sendet)
             await attachProducerToHls(confId, room.router, pAud, presenterId, "screenAudio").catch(err => 
                 console.error("refreshHlsBindings screenAudio failed:", err));
+        } else if (organizerPeerForDummy) {
+            // Fallback: Dummy-Audio für Screen
+            const dummy = pickDummyProducer(organizerPeerForDummy, { kind: "audio", hlsSlot: "screen" });
+            if (dummy) {
+                await attachProducerToHls(confId, room.router, dummy, organizer.uid, "screenAudio").catch(err => 
+                    console.error("refreshHlsBindings screenAudio (dummy) failed:", err));
+            }
         }
 
         // ScreenShare: presenter screen video (optional)
         const pScreenV = pickProducer(presenterPeer, { kind: "video", mediaTag: "screen" });
-        if (pScreenV) {
-            await attachProducerToHls(confId, room.router, pScreenV, presenterId, "screenVideo").catch(err => 
-                console.error("refreshHlsBindings screenVideo failed:", err));
+        await bindSlot("screenVideo", pScreenV, presenterId, "screen", "video");
+    } else {
+        // Kein Presenter: Screen-Slots auf Dummy setzen
+        if (organizerPeerForDummy) {
+            const dummyScreenV = pickDummyProducer(organizerPeerForDummy, { kind: "video", hlsSlot: "screen" });
+            const dummyScreenA = pickDummyProducer(organizerPeerForDummy, { kind: "audio", hlsSlot: "screen" });
+            if (dummyScreenV) {
+                await attachProducerToHls(confId, room.router, dummyScreenV, organizer.uid, "screenVideo").catch(() => {});
+            }
+            if (dummyScreenA) {
+                await attachProducerToHls(confId, room.router, dummyScreenA, organizer.uid, "screenAudio").catch(() => {});
+            }
         }
     }
 
@@ -483,13 +524,17 @@ async function refreshHlsBindings(confId) {
         const oCamV = pickProducer(orgPeer, { kind: "video", mediaTag: "cam" });
         const oAud = pickProducer(orgPeer, { kind: "audio" });
 
-        if (oCamV) {
-            await attachProducerToHls(confId, room.router, oCamV, orgId, "organizerVideo").catch(err => 
-                console.error("refreshHlsBindings organizerVideo failed:", err));
+        await bindSlot("organizerVideo", oCamV, orgId, "organizer", "video");
+        await bindSlot("organizerAudio", oAud, orgId, "organizer", "audio");
+    } else if (organizerPeerForDummy) {
+        // Fallback: Organizer-Dummies (sollte nicht passieren, aber sicher ist sicher)
+        const dummyOrgV = pickDummyProducer(organizerPeerForDummy, { kind: "video", hlsSlot: "organizer" });
+        const dummyOrgA = pickDummyProducer(organizerPeerForDummy, { kind: "audio", hlsSlot: "organizer" });
+        if (dummyOrgV) {
+            await attachProducerToHls(confId, room.router, dummyOrgV, organizer.uid, "organizerVideo").catch(() => {});
         }
-        if (oAud) {
-            await attachProducerToHls(confId, room.router, oAud, orgId, "organizerAudio").catch(err => 
-                console.error("refreshHlsBindings organizerAudio failed:", err));
+        if (dummyOrgA) {
+            await attachProducerToHls(confId, room.router, dummyOrgA, organizer.uid, "organizerAudio").catch(() => {});
         }
     }
 
@@ -498,13 +543,17 @@ async function refreshHlsBindings(confId) {
         const qCamV = pickProducer(questionerPeer, { kind: "video", mediaTag: "cam" });
         const qAud = pickProducer(questionerPeer, { kind: "audio" });
 
-        if (qCamV) {
-            await attachProducerToHls(confId, room.router, qCamV, questionerId, "questionerVideo").catch(err => 
-                console.error("refreshHlsBindings questionerVideo failed:", err));
+        await bindSlot("questionerVideo", qCamV, questionerId, "questioner", "video");
+        await bindSlot("questionerAudio", qAud, questionerId, "questioner", "audio");
+    } else if (organizerPeerForDummy) {
+        // Fallback: Questioner-Dummies
+        const dummyQuesV = pickDummyProducer(organizerPeerForDummy, { kind: "video", hlsSlot: "questioner" });
+        const dummyQuesA = pickDummyProducer(organizerPeerForDummy, { kind: "audio", hlsSlot: "questioner" });
+        if (dummyQuesV) {
+            await attachProducerToHls(confId, room.router, dummyQuesV, organizer.uid, "questionerVideo").catch(() => {});
         }
-        if (qAud) {
-            await attachProducerToHls(confId, room.router, qAud, questionerId, "questionerAudio").catch(err => 
-                console.error("refreshHlsBindings questionerAudio failed:", err));
+        if (dummyQuesA) {
+            await attachProducerToHls(confId, room.router, dummyQuesA, organizer.uid, "questionerAudio").catch(() => {});
         }
     }
 
@@ -554,7 +603,22 @@ async function attachProducerToHls(conferenceId, router, producer, userId, strea
             consumer.requestKeyFrame().catch(() => {});
         }, 2000);
         consumer.on("transportclose", () => clearInterval(iv));
-        consumer.on("producerclose", () => clearInterval(iv));
+        consumer.on("producerclose", () => {
+            clearInterval(iv);
+            // WICHTIG: Wenn echter Producer weg ist, automatisch auf Dummy zurückbinden
+            ingest.consumers[streamType] = null;
+            ingest.ready.delete(streamType);
+            refreshHlsBindings(conferenceId).catch(err => 
+                console.error("refreshHlsBindings failed after producerclose:", err));
+        });
+    } else {
+        // Audio: Auch Producer-Close Handler für Rebind
+        consumer.on("producerclose", () => {
+            ingest.consumers[streamType] = null;
+            ingest.ready.delete(streamType);
+            refreshHlsBindings(conferenceId).catch(err => 
+                console.error("refreshHlsBindings failed after producerclose:", err));
+        });
     }
 
     console.log(`✅ HLS ${streamType} attached: producer ${producer.id}, consumer ${consumer.id}`);
