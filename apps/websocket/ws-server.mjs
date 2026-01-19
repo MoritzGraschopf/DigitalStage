@@ -25,6 +25,9 @@ const organizerByConf = new Map();
 // conferenceId -> questionerUserId (zentrale Quelle der Wahrheit für Questioner)
 const questionerByConf = new Map();
 
+// Debounce-Timer für refreshHlsBindings (verhindert Rebinding-Spam)
+const refreshTimers = new Map();
+
 const WS = {OPEN: 1};
 
 function ensurePresence(confId) {
@@ -105,6 +108,14 @@ function now() {
 
 let worker;
 
+const videoRtcpFeedback = [
+    { type: "nack" },
+    { type: "nack", parameter: "pli" },
+    { type: "ccm", parameter: "fir" },
+    { type: "goog-remb" },
+    { type: "transport-cc" }
+];
+
 const mediaCodecs = [
     {
         kind: "audio",
@@ -117,8 +128,8 @@ const mediaCodecs = [
         kind: "video",
         mimeType: "video/VP8",
         clockRate: 90000,
-        parameters: {},
-        preferredPayloadType: 96
+        preferredPayloadType: 96,
+        rtcpFeedback: videoRtcpFeedback
     }
 ];
 
@@ -448,6 +459,17 @@ function findOrganizerPeer(room) {
     return null;
 }
 
+// Debounced refreshHlsBindings (verhindert Rebinding-Spam bei mehrfachen Events)
+function scheduleRefresh(confId) {
+    const prev = refreshTimers.get(confId);
+    if (prev) clearTimeout(prev);
+    refreshTimers.set(confId, setTimeout(() => {
+        refreshTimers.delete(confId);
+        refreshHlsBindings(confId).catch(err => 
+            console.error("refreshHlsBindings failed:", err));
+    }, 150));
+}
+
 // Rebind HLS bindings - zentrale Funktion die immer den aktuellen Zustand betrachtet
 // Wird aufgerufen bei: produce, PresenterChanged, QuestionerActivated/Deactivated
 async function refreshHlsBindings(confId) {
@@ -505,8 +527,13 @@ async function refreshHlsBindings(confId) {
         const pScreenV = pickProducer(presenterPeer, { kind: "video", mediaTag: "screen" });
         await bindSlot("screenVideo", pScreenV, presenterId, "screen", "video");
     } else {
-        // Kein Presenter: Screen-Slots auf Dummy setzen
-        if (organizerPeerForDummy) {
+        // Kein Presenter: ALLE Presenter-Slots UND Screen-Slots auf Dummy setzen
+        if (organizerPeerForDummy && organizer) {
+            // Presenter-Slots auf Dummy
+            await bindSlot("presenterVideo", null, null, "presenter", "video");
+            await bindSlot("presenterAudio", null, null, "presenter", "audio");
+
+            // Screen-Slots auf Dummy
             const dummyScreenV = pickDummyProducer(organizerPeerForDummy, { kind: "video", hlsSlot: "screen" });
             const dummyScreenA = pickDummyProducer(organizerPeerForDummy, { kind: "audio", hlsSlot: "screen" });
             if (dummyScreenV) {
@@ -564,6 +591,11 @@ async function attachProducerToHls(conferenceId, router, producer, userId, strea
     // streamType: "screenVideo", "screenAudio", "presenterVideo", "presenterAudio", "questionerVideo", "questionerAudio", "organizerVideo", "organizerAudio"
     const ingest = await initHlsForConference(conferenceId, router);
 
+    // Idempotent machen: Verhindert churn wenn schon korrekt gebunden
+    if (ingest.bound[streamType] === producer.id && ingest.consumers[streamType]) {
+        return; // schon korrekt gebunden
+    }
+
     // Start FFmpeg beim ersten Producer
     if (!ingest.started) {
         startFfmpeg(conferenceId);
@@ -585,39 +617,56 @@ async function attachProducerToHls(conferenceId, router, producer, userId, strea
         return;
     }
 
+    // Consumer erst paused erstellen für deterministisches Keyframe-Handling
     const consumer = await plainTransport.consume({
         producerId: producer.id,
         rtpCapabilities: ffmpegRtpCapabilities,
-        paused: false,
+        paused: true, // WICHTIG: Erst paused, dann Keyframe, dann resume
     });
 
     ingest.consumers[streamType] = consumer;
+    ingest.bound[streamType] = producer.id;
     ingest.ready.add(streamType);
 
     // SDP wird bereits beim initHlsForConference geschrieben
     // (FFmpeg lädt SDP nur beim Start, späteres Rewriting bringt nichts)
 
     if (consumer.kind === "video") {
-        await consumer.requestKeyFrame();
+        // Keyframe ASAP anfordern, dann resume leicht verzögert
+        try {
+            await consumer.requestKeyFrame();
+        } catch {}
+
+        setTimeout(() => {
+            consumer.resume().catch(() => {});
+            consumer.requestKeyFrame().catch(() => {});
+        }, 150);
+
         const iv = setInterval(() => {
             consumer.requestKeyFrame().catch(() => {});
-        }, 2000);
+        }, 1000); // Häufigere Keyframe-Requests für bessere Stabilität
+
         consumer.on("transportclose", () => clearInterval(iv));
         consumer.on("producerclose", () => {
             clearInterval(iv);
             // WICHTIG: Wenn echter Producer weg ist, automatisch auf Dummy zurückbinden
             ingest.consumers[streamType] = null;
+            delete ingest.bound[streamType];
             ingest.ready.delete(streamType);
-            refreshHlsBindings(conferenceId).catch(err => 
-                console.error("refreshHlsBindings failed after producerclose:", err));
+            scheduleRefresh(conferenceId); // Debounced refresh
         });
     } else {
+        // Audio: Resume sofort
+        setTimeout(() => {
+            consumer.resume().catch(() => {});
+        }, 0);
+
         // Audio: Auch Producer-Close Handler für Rebind
         consumer.on("producerclose", () => {
             ingest.consumers[streamType] = null;
+            delete ingest.bound[streamType];
             ingest.ready.delete(streamType);
-            refreshHlsBindings(conferenceId).catch(err => 
-                console.error("refreshHlsBindings failed after producerclose:", err));
+            scheduleRefresh(conferenceId); // Debounced refresh
         });
     }
 
@@ -816,9 +865,8 @@ wss.on("connection", (ws) => {
                 presenterByConf.delete(msg.conferenceId);
             }
             
-            // HLS-Bindings neu setzen, da sich die Rollen geändert haben
-            refreshHlsBindings(msg.conferenceId).catch(e => 
-                console.error("refreshHlsBindings failed after PresenterChanged:", e));
+            // HLS-Bindings neu setzen, da sich die Rollen geändert haben (debounced)
+            scheduleRefresh(msg.conferenceId);
             
             wss.clients.forEach((client) => {
                 client.send(JSON.stringify({
@@ -839,9 +887,8 @@ wss.on("connection", (ws) => {
             const peer = room?.peers.get(msg.userId);
             if (peer) peer.role = "QUESTIONER";
             
-            // HLS-Bindings neu setzen
-            refreshHlsBindings(msg.conferenceId).catch(e => 
-                console.error("refreshHlsBindings failed after QuestionerActivated:", e));
+            // HLS-Bindings neu setzen (debounced)
+            scheduleRefresh(msg.conferenceId);
             
             wss.clients.forEach((client) => {
                 client.send(JSON.stringify({
@@ -862,9 +909,8 @@ wss.on("connection", (ws) => {
             const peer = room?.peers.get(msg.userId);
             if (peer && peer.role === "QUESTIONER") peer.role = "PARTICIPANT";
             
-            // HLS-Bindings neu setzen
-            refreshHlsBindings(msg.conferenceId).catch(e => 
-                console.error("refreshHlsBindings failed after QuestionerDeactivated:", e));
+            // HLS-Bindings neu setzen (debounced)
+            scheduleRefresh(msg.conferenceId);
             
             wss.clients.forEach((client) => {
                 client.send(JSON.stringify({
@@ -1043,9 +1089,8 @@ wss.on("connection", (ws) => {
                 }
 
                 // HLS mapping: Zentral über refreshHlsBindings() statt inline
-                // Das macht alle 8 Slots korrekt basierend auf aktuellem Zustand
-                await refreshHlsBindings(conferenceId).catch(err => 
-                    console.error("refreshHlsBindings failed after produce:", err));
+                // Das macht alle 8 Slots korrekt basierend auf aktuellem Zustand (debounced)
+                scheduleRefresh(conferenceId);
 
                 respond(ws, requestId, {id: producer.id}); // ✅ CHANGED
 

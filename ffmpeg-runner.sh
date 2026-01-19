@@ -19,47 +19,44 @@ while true; do
   echo "[ffmpeg-runner] starting ffmpeg..."
   ffmpeg -hide_banner -loglevel info -stats \
     -protocol_whitelist file,udp,rtp \
-    -analyzeduration 10M -probesize 10M \
-    -fflags nobuffer -flags low_delay \
+    -analyzeduration 0 -probesize 64k \
+    -fflags +nobuffer+discardcorrupt -flags low_delay \
+    -max_delay 0 \
     -i "$SDP" \
     \
     -map 0:v:0? -map 0:a:0? \
-    -c:v libx264 -preset veryfast -tune zerolatency \
-    -force_key_frames "expr:gte(t,n_forced*2)" \
-    -g 60 -keyint_min 60 -sc_threshold 0 \
-    -c:a aac -b:a 128k -ar 48000 \
-    -f hls -hls_time 2 -hls_list_size 3 \
-    -hls_flags delete_segments+independent_segments \
+    -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p \
+    -g 30 -keyint_min 30 -sc_threshold 0 -bf 0 \
+    -c:a aac -b:a 96k -ar 48000 \
+    -f hls -hls_time 1 -hls_list_size 2 \
+    -hls_flags delete_segments+independent_segments+temp_file \
     -hls_start_number_source epoch \
     -hls_segment_filename "$HLS/screen_%05d.ts" "$HLS/screen.m3u8" \
     \
     -map 0:v:1? -map 0:a:1? \
-    -c:v libx264 -preset veryfast -tune zerolatency \
-    -force_key_frames "expr:gte(t,n_forced*2)" \
-    -g 60 -keyint_min 60 -sc_threshold 0 \
-    -c:a aac -b:a 128k -ar 48000 \
-    -f hls -hls_time 2 -hls_list_size 3 \
-    -hls_flags delete_segments+independent_segments \
+    -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p \
+    -g 30 -keyint_min 30 -sc_threshold 0 -bf 0 \
+    -c:a aac -b:a 96k -ar 48000 \
+    -f hls -hls_time 1 -hls_list_size 2 \
+    -hls_flags delete_segments+independent_segments+temp_file \
     -hls_start_number_source epoch \
     -hls_segment_filename "$HLS/presenter_%05d.ts" "$HLS/presenter.m3u8" \
     \
     -map 0:v:2? -map 0:a:2? \
-    -c:v libx264 -preset veryfast -tune zerolatency \
-    -force_key_frames "expr:gte(t,n_forced*2)" \
-    -g 60 -keyint_min 60 -sc_threshold 0 \
-    -c:a aac -b:a 128k -ar 48000 \
-    -f hls -hls_time 2 -hls_list_size 3 \
-    -hls_flags delete_segments+independent_segments \
+    -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p \
+    -g 30 -keyint_min 30 -sc_threshold 0 -bf 0 \
+    -c:a aac -b:a 96k -ar 48000 \
+    -f hls -hls_time 1 -hls_list_size 2 \
+    -hls_flags delete_segments+independent_segments+temp_file \
     -hls_start_number_source epoch \
     -hls_segment_filename "$HLS/questioner_%05d.ts" "$HLS/questioner.m3u8" \
     \
     -map 0:v:3? -map 0:a:3? \
-    -c:v libx264 -preset veryfast -tune zerolatency \
-    -force_key_frames "expr:gte(t,n_forced*2)" \
-    -g 60 -keyint_min 60 -sc_threshold 0 \
-    -c:a aac -b:a 128k -ar 48000 \
-    -f hls -hls_time 2 -hls_list_size 3 \
-    -hls_flags delete_segments+independent_segments \
+    -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p \
+    -g 30 -keyint_min 30 -sc_threshold 0 -bf 0 \
+    -c:a aac -b:a 96k -ar 48000 \
+    -f hls -hls_time 1 -hls_list_size 2 \
+    -hls_flags delete_segments+independent_segments+temp_file \
     -hls_start_number_source epoch \
     -hls_segment_filename "$HLS/organizer_%05d.ts" "$HLS/organizer.m3u8" \
   || true
