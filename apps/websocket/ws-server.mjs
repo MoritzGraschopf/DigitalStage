@@ -361,10 +361,21 @@ async function createPlainOut(router, {ip, port, rtcpPort}) {
 
 async function initHlsForConference(conferenceId, router) {
     const existing = hlsIngest.get(conferenceId);
-    if (existing && existing.routerId === router.id)
+    
+    // ✅ Nur wiederverwenden, wenn der State vollständig ist
+    if (
+        existing &&
+        existing.routerId === router.id &&
+        existing.transports &&
+        existing.consumers
+    ) {
         return existing;
-    if (existing)
+    }
+    
+    // ✅ sonst weg damit (stale/inkompatibel)
+    if (existing) {
         await cleanupHls(conferenceId);
+    }
 
     await ensureDir("/sdp");
 
@@ -589,10 +600,23 @@ async function refreshHlsBindings(confId) {
 
 async function attachProducerToHls(conferenceId, router, producer, userId, streamType) {
     // streamType: "screenVideo", "screenAudio", "presenterVideo", "presenterAudio", "questionerVideo", "questionerAudio", "organizerVideo", "organizerAudio"
-    const ingest = await initHlsForConference(conferenceId, router);
+    let ingest = await initHlsForConference(conferenceId, router);
+
+    // ✅ Defensive Checks: State-Shape validieren
+    if (!ingest || !ingest.transports || !ingest.consumers) {
+        console.error("❌ HLS ingest state invalid, reinitializing...", ingest && Object.keys(ingest));
+        await cleanupHls(conferenceId);
+        ingest = await initHlsForConference(conferenceId, router);
+    }
+
+    const plainTransport = ingest.transports?.[streamType];
+    if (!plainTransport) {
+        console.error(`❌ Missing plainTransport for ${streamType}. Available:`, Object.keys(ingest.transports || {}));
+        return;
+    }
 
     // Idempotent machen: Verhindert churn wenn schon korrekt gebunden
-    if (ingest.bound[streamType] === producer.id && ingest.consumers[streamType]) {
+    if (ingest.bound && ingest.bound[streamType] === producer.id && ingest.consumers[streamType]) {
         return; // schon korrekt gebunden
     }
 
@@ -609,12 +633,6 @@ async function attachProducerToHls(conferenceId, router, producer, userId, strea
         } catch {}
 
         ingest.consumers[streamType] = null;
-    }
-
-    const plainTransport = ingest.transports[streamType];
-    if (!plainTransport) {
-        console.error(`Transport ${streamType} nicht gefunden`);
-        return;
     }
 
     // Consumer erst paused erstellen für deterministisches Keyframe-Handling
