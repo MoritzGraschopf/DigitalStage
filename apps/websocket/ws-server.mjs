@@ -142,7 +142,9 @@ const ffmpegRtpCapabilities = {
             clockRate: 48000,
             channels: 2,
             parameters: {},
-            rtcpFeedback: []
+            rtcpFeedback: [
+                { type: "transport-cc" } // optional, schadet nicht
+            ]
         },
         {
             kind: "video",
@@ -150,7 +152,7 @@ const ffmpegRtpCapabilities = {
             preferredPayloadType: 96,
             clockRate: 90000,
             parameters: {},
-            rtcpFeedback: []
+            rtcpFeedback: videoRtcpFeedback // ✅ statt []
         }
     ],
     headerExtensions: [],
@@ -423,6 +425,7 @@ async function initHlsForConference(conferenceId, router) {
             organizerVideo: null,
             organizerAudio: null,
         },
+        bound: {}, // streamType -> producerId (für idempotentes Binding)
         ready: new Set(),
         sdpWritten: true, // SDP wird sofort geschrieben, nicht erst bei ready.size >= 8
     };
@@ -609,6 +612,9 @@ async function attachProducerToHls(conferenceId, router, producer, userId, strea
         ingest = await initHlsForConference(conferenceId, router);
     }
 
+    // ✅ Falls alter State ohne bound existiert, initialisieren
+    ingest.bound ??= {};
+
     const plainTransport = ingest.transports?.[streamType];
     if (!plainTransport) {
         console.error(`❌ Missing plainTransport for ${streamType}. Available:`, Object.keys(ingest.transports || {}));
@@ -616,7 +622,7 @@ async function attachProducerToHls(conferenceId, router, producer, userId, strea
     }
 
     // Idempotent machen: Verhindert churn wenn schon korrekt gebunden
-    if (ingest.bound && ingest.bound[streamType] === producer.id && ingest.consumers[streamType]) {
+    if (ingest.bound[streamType] === producer.id && ingest.consumers[streamType]) {
         return; // schon korrekt gebunden
     }
 
