@@ -28,6 +28,49 @@ const questionerByConf = new Map();
 // Debounce-Timer für refreshHlsBindings (verhindert Rebinding-Spam)
 const refreshTimers = new Map();
 
+// Active-File Management für FFmpeg Watchdog
+const ACTIVE_FILE = "/sdp/active";
+let activeTimer = null;
+
+async function touchActive() {
+    const t = new Date();
+    try {
+        await fs.promises.utimes(ACTIVE_FILE, t, t);
+    } catch {
+        await fs.promises.writeFile(ACTIVE_FILE, "1");
+    }
+}
+
+async function removeActive() {
+    try {
+        await fs.promises.unlink(ACTIVE_FILE);
+    } catch {}
+}
+
+function anyRoomActive() {
+    for (const room of rtcRooms.values()) {
+        if (room.peers.size > 0) return true;
+    }
+    return false;
+}
+
+function updateActiveHeartbeat() {
+    if (anyRoomActive()) {
+        if (!activeTimer) {
+            activeTimer = setInterval(() => {
+                touchActive().catch(() => {});
+            }, 2000);
+        }
+        touchActive().catch(() => {});
+    } else {
+        if (activeTimer) {
+            clearInterval(activeTimer);
+            activeTimer = null;
+        }
+        removeActive().catch(() => {});
+    }
+}
+
 const WS = {OPEN: 1};
 
 function ensurePresence(confId) {
@@ -214,6 +257,15 @@ async function cleanupHls(confId) {
     } finally {
         hlsIngest.delete(confId);
         presenterByConf.delete(confId);
+        questionerByConf.delete(confId); // ✅ Cleanup questioner state
+        organizerByConf.delete(confId); // ✅ Cleanup organizer state (optional, aber sauberer)
+        
+        // ✅ Cleanup refreshTimer (verhindert Geister-Rebinds)
+        const timer = refreshTimers.get(confId);
+        if (timer) {
+            clearTimeout(timer);
+            refreshTimers.delete(confId);
+        }
     }
 }
 
@@ -260,6 +312,9 @@ async function cleanupPeer(confId, userId) {
         catch {}
         rtcRooms.delete(confId);
     }
+
+    // Active-File Heartbeat updaten (Fix 2B)
+    updateActiveHeartbeat();
 }
 
 /* =========================
@@ -746,6 +801,10 @@ async function createWebRtcTransport(router) {
 wss.on("connection", (ws) => {
     console.log("🔌 Client connected");
 
+    // Aggressiverer Heartbeat (Fix 2A)
+    const PING_MS = 5000;
+    const DEAD_MS = 12000;
+    
     ws.isAlive = true;
     ws.lastPong = now();
     ws.on("pong", () => {
@@ -754,19 +813,21 @@ wss.on("connection", (ws) => {
     });
 
     const hb = setInterval(() => {
-        if (!ws.isAlive) {
+        if (ws.readyState !== WS.OPEN) return;
+
+        if (now() - ws.lastPong > DEAD_MS) {
             try {
                 ws.terminate();
             } catch {
             }
             return;
         }
-        ws.isAlive = false;
+
         try {
             ws.ping();
         } catch {
         }
-    }, 15000);
+    }, PING_MS);
 
     ws.on("close", async () => {
         clearInterval(hb);
@@ -1005,6 +1066,9 @@ wss.on("connection", (ws) => {
                 });
 
                 broadcastRoom(conferenceId, userId, {type: "sfu:peer-joined", userId});
+
+                // Active-File Heartbeat updaten (Fix 2B)
+                updateActiveHeartbeat();
             } catch (e) {
                 respondError(ws, requestId, e);
             }
