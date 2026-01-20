@@ -386,37 +386,11 @@ function HLSViewer({
                     element.load();
                 }
 
-                const checkStreamActive = (videoEl: HTMLVideoElement) => {
-                    if (!streamKey || !(videoEl instanceof HTMLVideoElement)) return;
-                    
-                    // Prüfe ob Video aktiv ist (nicht nur schwarze Frames)
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    if (!ctx) return;
-                    
-                    canvas.width = videoEl.videoWidth || 1;
-                    canvas.height = videoEl.videoHeight || 1;
-                    ctx.drawImage(videoEl, 0, 0);
-                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                    const data = imageData.data;
-                    
-                    // Prüfe ob alle Pixel schwarz sind (oder sehr dunkel)
-                    let allBlack = true;
-                    for (let i = 0; i < data.length; i += 4) {
-                        const r = data[i];
-                        const g = data[i + 1];
-                        const b = data[i + 2];
-                        // Wenn ein Pixel nicht schwarz ist (Toleranz für Encoding-Artefakte)
-                        if (r > 5 || g > 5 || b > 5) {
-                            allBlack = false;
-                            break;
-                        }
+                // Vereinfachte Aktivitätserkennung: Nutze Events statt Pixel-Analyse
+                const markActive = () => {
+                    if (streamKey) {
+                        setActiveStreams(prev => ({ ...prev, [streamKey]: true }));
                     }
-                    
-                    setActiveStreams(prev => ({
-                        ...prev,
-                        [streamKey]: !allBlack && videoEl.readyState >= 2
-                    }));
                 };
 
                 if (HlsClass && HlsClass.isSupported()) {
@@ -434,21 +408,13 @@ function HLSViewer({
                     hls.on(HlsClass.Events.MANIFEST_PARSED, () => {
                         element.play().catch((err) => console.warn("Autoplay blocked:", err));
                         if (streamKey && element instanceof HTMLVideoElement) {
-                            // Prüfe nach kurzer Verzögerung ob Stream aktiv ist
-                            setTimeout(() => checkStreamActive(element), 2000);
-                            // Regelmäßig prüfen
-                            const interval = setInterval(() => {
-                                if (element.readyState >= 2) {
-                                    checkStreamActive(element);
-                                }
-                            }, 3000);
-                            element.addEventListener('loadeddata', () => {
-                                checkStreamActive(element);
-                            });
-                            // Cleanup
+                            // Markiere Stream als aktiv wenn er spielt
+                            element.addEventListener("playing", markActive, { once: true });
+                            element.addEventListener("timeupdate", markActive, { once: true });
                             element.addEventListener('ended', () => {
-                                clearInterval(interval);
-                                setActiveStreams(prev => ({ ...prev, [streamKey]: false }));
+                                if (streamKey) {
+                                    setActiveStreams(prev => ({ ...prev, [streamKey]: false }));
+                                }
                             });
                         }
                     });
@@ -465,17 +431,13 @@ function HLSViewer({
                     element.src = url;
                     element.play().catch((err) => console.warn("Autoplay blocked:", err));
                     if (streamKey && element instanceof HTMLVideoElement) {
-                        element.addEventListener('loadeddata', () => {
-                            setTimeout(() => checkStreamActive(element), 2000);
-                        });
-                        const interval = setInterval(() => {
-                            if (element.readyState >= 2) {
-                                checkStreamActive(element);
-                            }
-                        }, 3000);
+                        // Markiere Stream als aktiv wenn er spielt
+                        element.addEventListener("playing", markActive, { once: true });
+                        element.addEventListener("timeupdate", markActive, { once: true });
                         element.addEventListener('ended', () => {
-                            clearInterval(interval);
-                            setActiveStreams(prev => ({ ...prev, [streamKey]: false }));
+                            if (streamKey) {
+                                setActiveStreams(prev => ({ ...prev, [streamKey]: false }));
+                            }
                         });
                     }
                 } else {
@@ -559,19 +521,20 @@ function HLSViewer({
 
             {/* Screen-Share groß (wenn verfügbar) */}
             <div className="flex-1 min-h-0 relative rounded-xl overflow-hidden bg-black">
-                {activeStreams.screen ? (
-                    <video
-                        ref={screenVideoRef}
-                        autoPlay
-                        playsInline
-                        muted
-                        className="w-full h-full object-contain"
-                    />
-                ) : (
-                    <div className="w-full h-full flex items-center justify-center">
+                <video
+                    ref={screenVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-contain"
+                />
+
+                {!activeStreams.screen && (
+                    <div className="absolute inset-0 flex items-center justify-center">
                         <span className="text-muted-foreground">Keine Bildschirm-Freigabe</span>
                     </div>
                 )}
+
                 {activeStreams.screen && (
                     <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent px-4 py-3">
                         <span className="text-sm font-semibold text-white">Bildschirm-Freigabe</span>
