@@ -360,6 +360,7 @@ t=0 0
 
 m=video 5004 RTP/AVP ${videoPt}
 a=rtpmap:${videoPt} VP8/90000
+a=framerate:30
 a=rtcp:5005
 a=recvonly
 
@@ -370,6 +371,7 @@ a=recvonly
 
 m=video 5008 RTP/AVP ${videoPt}
 a=rtpmap:${videoPt} VP8/90000
+a=framerate:30
 a=rtcp:5009
 a=recvonly
 
@@ -380,6 +382,7 @@ a=recvonly
 
 m=video 5012 RTP/AVP ${videoPt}
 a=rtpmap:${videoPt} VP8/90000
+a=framerate:30
 a=rtcp:5013
 a=recvonly
 
@@ -390,6 +393,7 @@ a=recvonly
 
 m=video 5016 RTP/AVP ${videoPt}
 a=rtpmap:${videoPt} VP8/90000
+a=framerate:30
 a=rtcp:5017
 a=recvonly
 
