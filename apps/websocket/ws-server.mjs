@@ -30,45 +30,48 @@ const refreshTimers = new Map();
 
 // Active-File Management für FFmpeg Watchdog
 const ACTIVE_FILE = "/sdp/active";
-let activeTimer = null;
+let activeInterval = null;
 
-async function touchActive() {
-    const t = new Date();
+function touchActive() {
     try {
-        await fs.promises.utimes(ACTIVE_FILE, t, t);
-    } catch {
-        await fs.promises.writeFile(ACTIVE_FILE, "1");
+        fs.closeSync(fs.openSync(ACTIVE_FILE, "a"));
+        fs.utimesSync(ACTIVE_FILE, new Date(), new Date());
+    } catch (e) {
+        console.error("touchActive failed:", e);
     }
 }
 
-async function removeActive() {
-    try {
-        await fs.promises.unlink(ACTIVE_FILE);
-    } catch {}
+function setActive(on) {
+    if (on) {
+        if (activeInterval) return; // Bereits aktiv
+        touchActive();
+        activeInterval = setInterval(touchActive, 2000);
+        console.log("✅ ACTIVE heartbeat started");
+    } else {
+        if (activeInterval) {
+            clearInterval(activeInterval);
+            activeInterval = null;
+        }
+        try {
+            fs.unlinkSync(ACTIVE_FILE);
+        } catch {}
+        console.log("🛑 ACTIVE heartbeat stopped");
+    }
 }
 
-function anyRoomActive() {
+function anyRealPeersAlive() {
     for (const room of rtcRooms.values()) {
-        if (room.peers.size > 0) return true;
+        for (const peer of room.peers.values()) {
+            if (!peer?.ws) continue;
+            if (peer.role === "VIEWER") continue; // VIEWER zählen nicht als "aktiv"
+            return true;
+        }
     }
     return false;
 }
 
-function updateActiveHeartbeat() {
-    if (anyRoomActive()) {
-        if (!activeTimer) {
-            activeTimer = setInterval(() => {
-                touchActive().catch(() => {});
-            }, 2000);
-        }
-        touchActive().catch(() => {});
-    } else {
-        if (activeTimer) {
-            clearInterval(activeTimer);
-            activeTimer = null;
-        }
-        removeActive().catch(() => {});
-    }
+function updateActive() {
+    setActive(anyRealPeersAlive());
 }
 
 const WS = {OPEN: 1};
@@ -313,8 +316,8 @@ async function cleanupPeer(confId, userId) {
         rtcRooms.delete(confId);
     }
 
-    // Active-File Heartbeat updaten (Fix 2B)
-    updateActiveHeartbeat();
+    // Active-File Heartbeat updaten (nur wenn echte SFU-Teilnehmer da sind)
+    updateActive();
 }
 
 /* =========================
@@ -1067,8 +1070,8 @@ wss.on("connection", (ws) => {
 
                 broadcastRoom(conferenceId, userId, {type: "sfu:peer-joined", userId});
 
-                // Active-File Heartbeat updaten (Fix 2B)
-                updateActiveHeartbeat();
+                // Active-File Heartbeat updaten (nur wenn echte SFU-Teilnehmer, nicht VIEWER)
+                updateActive();
             } catch (e) {
                 respondError(ws, requestId, e);
             }
