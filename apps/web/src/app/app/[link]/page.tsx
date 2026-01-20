@@ -468,7 +468,15 @@ function HLSViewer({
             }
         };
 
-        loadHls()
+        loadHls();
+
+        // Cleanup: Zerstöre alle HLS-Instanzen beim Unmount oder Dependency-Change
+        return () => {
+            hlsInstancesRef.forEach(h => {
+                try { h.destroy(); } catch {}
+            });
+            hlsInstancesRef.clear();
+        };
     }, [hasHls, screenUrl, presenterUrl, questionerUrl, organizerUrl, showPresenterVideo, showQuestionerVideo, showOrganizerVideo]);
 
     if (!hasHls) {
@@ -492,19 +500,27 @@ function HLSViewer({
         );
     }
 
-    // Sammle alle aktiven Video-Streams (außer Screen)
-    const activeVideoStreams =
+    // Sammle alle Overlay-Streams (immer rendern, wenn sie angezeigt werden sollen)
+    type OverlayStream = {
+        key: "presenter" | "questioner" | "organizer";
+        ref: React.RefObject<HTMLVideoElement | null>;
+        label: string;
+        isActive: boolean;
+    };
+
+    const overlayStreams: OverlayStream[] = (
         [
-            activeStreams.presenter && showPresenterVideo
-                ? { key: 'presenter', ref: presenterVideoRef, label: 'Präsentator' }
+            showPresenterVideo
+                ? { key: "presenter", ref: presenterVideoRef, label: "Präsentator", isActive: activeStreams.presenter }
                 : null,
-            activeStreams.questioner && showQuestionerVideo
-                ? { key: 'questioner', ref: questionerVideoRef, label: 'Fragesteller' }
+            showQuestionerVideo
+                ? { key: "questioner", ref: questionerVideoRef, label: "Fragesteller", isActive: activeStreams.questioner }
                 : null,
-            activeStreams.organizer && showOrganizerVideo
-                ? { key: 'organizer', ref: organizerVideoRef, label: 'Organisator' }
+            showOrganizerVideo
+                ? { key: "organizer", ref: organizerVideoRef, label: "Organisator", isActive: activeStreams.organizer }
                 : null,
-        ].filter(Boolean) as Array<{ key: string; ref: React.RefObject<HTMLVideoElement | null>; label: string }>;
+        ].filter(Boolean) as OverlayStream[]
+    );
 
 
     return (
@@ -542,25 +558,30 @@ function HLSViewer({
                 )}
 
                 {/* Video-Streams als Overlay unten rechts (dynamisch) */}
-                {activeVideoStreams.length > 0 && (
+                {overlayStreams.length > 0 && (
                     <div className="absolute bottom-4 right-4 flex flex-col gap-2 items-end">
-                        {activeVideoStreams.map((stream, index) => (
+                        {overlayStreams.map((s, index) => (
                             <div
-                                key={stream.key}
-                                className="w-48 sm:w-56 md:w-64 h-32 sm:h-40 rounded-xl overflow-hidden bg-gradient-to-br from-background to-muted/30 border-2 border-background shadow-2xl"
-                                style={{
-                                    animation: `slideInRight 0.3s ease-out ${index * 0.1}s both`
-                                }}
+                                key={s.key}
+                                className="relative w-48 sm:w-56 md:w-64 h-32 sm:h-40 rounded-xl overflow-hidden bg-gradient-to-br from-background to-muted/30 border-2 border-background shadow-2xl"
+                                style={{ animation: `slideInRight 0.3s ease-out ${index * 0.1}s both` }}
                             >
                                 <video
-                                    ref={stream.ref}
+                                    ref={s.ref}
                                     autoPlay
                                     playsInline
                                     muted
                                     className="w-full h-full object-cover"
                                 />
+
+                                {!s.isActive && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-white text-xs">
+                                        Warte auf Stream…
+                                    </div>
+                                )}
+
                                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent px-2 py-2">
-                                    <span className="text-xs font-semibold text-white">{stream.label}</span>
+                                    <span className="text-xs font-semibold text-white">{s.label}</span>
                                 </div>
                             </div>
                         ))}
@@ -570,17 +591,6 @@ function HLSViewer({
 
             {/* Audio-Stream (unsichtbar) */}
             <audio ref={audioRef} autoPlay playsInline />
-            
-            {/* Versteckte Video-Elemente für Streams die noch nicht aktiv sind */}
-            {showPresenterVideo && !activeStreams.presenter && (
-                <video ref={presenterVideoRef} autoPlay playsInline muted className="hidden" />
-            )}
-            {showQuestionerVideo && !activeStreams.questioner && (
-                <video ref={questionerVideoRef} autoPlay playsInline muted className="hidden" />
-            )}
-            {showOrganizerVideo && !activeStreams.organizer && (
-                <video ref={organizerVideoRef} autoPlay playsInline muted className="hidden" />
-            )}
             
             <style jsx>{`
                 @keyframes slideInRight {
