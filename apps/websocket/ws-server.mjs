@@ -1147,8 +1147,17 @@ wss.on("connection", (ws) => {
                 const transport = peer?.transports.get(transportId);
                 if (!transport) throw new Error("transport not found");
 
+                // Screen-Sharing nur für Präsentatoren erlauben
+                if (appData?.mediaTag === "screen" || appData?.source === "screen") {
+                    const presenterId = presenterByConf.get(conferenceId);
+                    if (userId !== presenterId) {
+                        throw new Error("Only the presenter is allowed to share their screen");
+                    }
+                }
+
                 if (peer?.role === "QUESTIONER") {
-                    // Screen-Sharing explizit blockieren (erkennbar an appData oder Track-Label)
+                    // Questioners können generell kein Screen-Sharing starten (wird oben bereits abgefangen)
+                    // Diese Prüfung bleibt als Fallback
                     if (appData?.mediaTag === "screen" || appData?.source === "screen") {
                         throw new Error("Questioners are not allowed to share their screen");
                     }
