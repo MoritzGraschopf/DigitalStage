@@ -1009,35 +1009,42 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
     }, [userById]);
 
     // Hilfsfunktion: Trenne Screenshare-Streams von normalen Video-Streams
-    // Ein Stream mit mehreren Video-Tracks hat wahrscheinlich Screenshare
+    // Tracks werden anhand ihrer Labels identifiziert (nicht nur Anzahl)
     const { participantStreams, screenShareStreams } = useMemo(() => {
         const participants: Record<string, MediaStream> = {};
         const screens: Record<string, MediaStream> = {};
 
         Object.entries(remoteStreams).forEach(([userId, stream]) => {
             const videoTracks = stream.getVideoTracks();
+            const audioTracks = stream.getAudioTracks();
             
-            // Wenn mehr als 1 Video-Track, ist der zweite wahrscheinlich Screenshare
-            if (videoTracks.length > 1) {
-                // Erster Track = Kamera
-                const cameraStream = new MediaStream([videoTracks[0], ...stream.getAudioTracks()]);
-                participants[userId] = cameraStream;
-                
-                // Zweiter Track = Screenshare
-                const screenStream = new MediaStream([videoTracks[1]]);
-                screens[userId] = screenStream;
-            } else if (videoTracks.length === 1) {
-                // Prüfe Track-Label für Screenshare-Indikatoren
-                const track = videoTracks[0];
+            // Trenne Video-Tracks anhand ihrer Labels
+            const cameraTracks: MediaStreamTrack[] = [];
+            const screenTracks: MediaStreamTrack[] = [];
+            
+            videoTracks.forEach(track => {
                 const label = track.label.toLowerCase();
-                if (label.includes('screen') || label.includes('display') || label.includes('window')) {
-                    screens[userId] = stream;
+                if (label.includes('screen') || label.includes('display') || label.includes('window') || label.includes('monitor')) {
+                    screenTracks.push(track);
                 } else {
-                    participants[userId] = stream;
+                    cameraTracks.push(track);
                 }
-            } else {
-                // Nur Audio oder kein Video
-                participants[userId] = stream;
+            });
+            
+            // Kamera-Video: Immer erstellen wenn vorhanden (auch wenn Screenshare aktiv ist)
+            if (cameraTracks.length > 0) {
+                const cameraStream = new MediaStream([...cameraTracks, ...audioTracks]);
+                participants[userId] = cameraStream;
+            } else if (audioTracks.length > 0) {
+                // Nur Audio ohne Video
+                const audioOnlyStream = new MediaStream([...audioTracks]);
+                participants[userId] = audioOnlyStream;
+            }
+            
+            // Screenshare-Video: Separater Stream
+            if (screenTracks.length > 0) {
+                const screenStream = new MediaStream([...screenTracks]);
+                screens[userId] = screenStream;
             }
         });
 
