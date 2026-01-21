@@ -40,12 +40,13 @@ has_any_hls_files() {
     -print -quit 2>/dev/null | grep -q .
 }
 
-latest_hls_age() {
-  local now ts epoch
+# Neu: age pro stream-prefix (screen/presenter/questioner/organizer)
+latest_age_for_prefix() {
+  local prefix="$1" now ts epoch
   now=$(date +%s)
 
   ts=$(find "$HLS" -maxdepth 1 -type f \
-      \( -name "*.m3u8" -o -name "*.m3u8.tmp" -o -name "*.ts" -o -name "*.ts.tmp" \) \
+      \( -name "${prefix}.m3u8" -o -name "${prefix}.m3u8.tmp" -o -name "${prefix}_*.ts" -o -name "${prefix}_*.ts.tmp" \) \
       -printf '%T@\n' 2>/dev/null | sort -nr | head -n1 || true)
 
   if [ -z "${ts:-}" ]; then
@@ -69,10 +70,6 @@ kill_ffmpeg() {
 start_ffmpeg() {
   log "starting ffmpeg..."
 
-  # Wichtig:
-  # - reorder_queue_size + max_delay + rtbufsize -> weniger kaputte VP8 Frames bei Jitter/Reorder
-  # - genpts -> sinnvollere Timestamps wenn RTP/SDP wackelt
-  # - discardcorrupt -> Müll rauswerfen statt Decoder zu vergiften
   ffmpeg -hide_banner -loglevel info -stats \
     -protocol_whitelist file,udp,rtp \
     -reorder_queue_size 1024 \
@@ -136,8 +133,6 @@ while true; do
   done
 
   # NICHT mehr automatisch clearen (wichtig für Stabilität & spätere MP4-Konvertierung)
-  # Wenn du einmalig pro Session doch löschen willst, mach’s bewusst:
-  # if [ ! -f "$SESSION_FLAG" ]; then rm -f "$HLS"/*.ts "$HLS"/*.m3u8 "$HLS"/*.tmp; fi
   touch "$SESSION_FLAG" 2>/dev/null || true
 
   PID="$(start_ffmpeg)"
@@ -154,6 +149,7 @@ while true; do
 
     uptime=$(( $(date +%s) - STARTED_AT ))
 
+    # Noch kein Output?
     if ! has_any_hls_files; then
       if [ "$uptime" -gt "$FIRST_OUTPUT_DEADLINE" ]; then
         log "no HLS output after ${FIRST_OUTPUT_DEADLINE}s -> restarting ffmpeg"
@@ -164,17 +160,21 @@ while true; do
       continue
     fi
 
+    # Warmup: keine Stall-Checks
     if [ "$uptime" -lt "$WARMUP_SEC" ]; then
       sleep "$CHECK_INTERVAL_SEC"
       continue
     fi
 
-    age="$(latest_hls_age)"
-    if [ "$age" -gt "$STALL_AFTER_SEC" ]; then
-      log "HLS stalled (${age}s) -> restarting ffmpeg"
-      kill_ffmpeg "$PID"
-      break
-    fi
+    # ✅ Neu: Stall-Check pro Playlist/Prefix
+    for p in screen presenter questioner organizer; do
+      age="$(latest_age_for_prefix "$p")"
+      if [ "$age" -gt "$STALL_AFTER_SEC" ]; then
+        log "$p stalled (${age}s) -> restarting ffmpeg"
+        kill_ffmpeg "$PID"
+        break 2
+      fi
+    done
 
     sleep "$CHECK_INTERVAL_SEC"
   done
