@@ -51,19 +51,9 @@ export async function POST(
             return NextResponse.json({ message: "Viewers cannot be presenter" }, { status: 400 });
         }
 
-        // Prüfe ob Organizer bereits Präsentator ist
-        const organizerConference = await prisma.userConference.findUnique({
-            where: {
-                userId_conferenceId: { userId: conf.organizerId, conferenceId: conf.id },
-            },
-            select: { isPresenter: true },
-        });
-
-        const isOrganizerPresenter = organizerConference?.isPresenter ?? false;
-
-        // Wenn Organizer Präsentator ist, können Questioner nicht zu Präsentator werden
-        if (isOrganizerPresenter && role === "QUESTIONER") {
-            return NextResponse.json({ message: "Cannot set questioner as presenter when organizer is already presenter" }, { status: 400 });
+        // Organizer kann nicht zum Präsentator gemacht werden
+        if (role === "ORGANIZER" || userId === conf.organizerId) {
+            return NextResponse.json({ message: "Organizer cannot be presenter" }, { status: 400 });
         }
 
         // Prüfe maximale Anzahl von WebRTC-Teilnehmern, wenn ein externer Präsentator gesetzt wird
@@ -121,13 +111,21 @@ export async function POST(
             },
         });
 
+        // Wenn der neue Präsentator aktuell ein QUESTIONER ist, Rolle auf PARTICIPANT ändern
+        // (Präsentator und Fragesteller sind nicht kompatibel)
+        const updateData: { isPresenter: boolean; role?: "PARTICIPANT" } = {
+            isPresenter: true,
+        };
+        
+        if (role === "QUESTIONER") {
+            updateData.role = "PARTICIPANT";
+        }
+
         await prisma.userConference.update({
             where: {
                 userId_conferenceId: { userId, conferenceId: conf.id },
             },
-            data: {
-                isPresenter: true,
-            },
+            data: updateData,
         });
 
         // WebSocket-Event wird vom Client gesendet (siehe Frontend)

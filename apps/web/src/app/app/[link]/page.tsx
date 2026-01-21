@@ -1044,12 +1044,14 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
         if (localStream && user) {
             const uc = conference?.participants.find(p => p.userId === user.id);
             const role = uc?.role as ExtendedRole | undefined;
+            const isPresenter = uc?.isPresenter ?? false;
             participants.push({
                 userId: user.id,
                 name: `${user.firstName}${user.lastName ? ` ${user.lastName}` : ""}`,
                 role: derivedRole,
-                isPresenter: uc?.isPresenter ?? false,
-                isQuestioner: role === "QUESTIONER",
+                isPresenter,
+                // Wenn Präsentator, dann nicht mehr als Questioner
+                isQuestioner: !isPresenter && role === "QUESTIONER",
                 isMuted: audioMuteStatus[user.id] ?? true,
                 isLocal: true,
             });
@@ -1061,12 +1063,14 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
             const role = uc?.role as ExtendedRole | undefined;
             const user = userById[userId];
             if (user) {
+                const isPresenter = uc?.isPresenter ?? false;
                 participants.push({
                     userId,
                     name: `${user.firstName}${user.lastName ? ` ${user.lastName}` : ""}`,
                     role: role ?? "PARTICIPANT",
-                    isPresenter: uc?.isPresenter ?? false,
-                    isQuestioner: role === "QUESTIONER",
+                    isPresenter,
+                    // Wenn Präsentator, dann nicht mehr als Questioner
+                    isQuestioner: !isPresenter && role === "QUESTIONER",
                     isMuted: audioMuteStatus[userId] ?? true,
                     isLocal: false,
                 });
@@ -1203,7 +1207,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                                         <div className="flex-1 min-w-0">
                                                             <div className="font-medium truncate">{organizer.firstName} {organizer.lastName ?? ""}</div>
                                                             <div className="text-xs text-muted-foreground">
-                                                                {currentPresenter?.id === organizer.id ? "Organizer & Präsentator" : "Organizer"}
+                                                                Organizer
                                                             </div>
                                                         </div>
                                                     </div>
@@ -1223,19 +1227,8 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                                                 <TooltipContent>Präsentator entfernen</TooltipContent>
                                                             </Tooltip>
                                                         ) : (
-                                                            <Tooltip>
-                                                                <TooltipTrigger asChild>
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="ghost"
-                                                                        onClick={() => handleSetPresenter(organizer.id)}
-                                                                        className="h-8 w-8 p-0"
-                                                                    >
-                                                                        <Crown className="w-4 h-4" />
-                                                                    </Button>
-                                                                </TooltipTrigger>
-                                                                <TooltipContent>Als Präsentator setzen</TooltipContent>
-                                                            </Tooltip>
+                                                            /* Organizer kann nicht zum Präsentator gemacht werden */
+                                                            <></>
                                                         )}
                                                     </div>
                                                 </div>
@@ -1274,8 +1267,9 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                                     {currentParticipants.map((u) => {
                                                         const uc = conference?.participants.find(p => p.userId === u.id);
                                                         const role = uc?.role as ExtendedRole | undefined;
-                                                        const isQuestioner = role === "QUESTIONER";
                                                         const isPresenter = uc?.isPresenter ?? false;
+                                                        // Wenn Präsentator, dann nicht mehr als Questioner
+                                                        const isQuestioner = !isPresenter && role === "QUESTIONER";
                                                         return (
                                                             <div key={u.id} className="p-3 rounded-lg border bg-card flex items-center justify-between hover:bg-accent/50 transition-colors">
                                                                 <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -1764,8 +1758,8 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                                         </div>
                                                     )}
 
-                                                    {/* Screenshare-Button wenn kein Screenshare aktiv (nur für ORGANIZER und PARTICIPANT, nicht für QUESTIONER) */}
-                                                    {totalParticipants > 0 && (derivedRole === "ORGANIZER" || derivedRole === "PARTICIPANT") && (
+                                                    {/* Screenshare-Button wenn kein Screenshare aktiv (nur für PARTICIPANT/Präsentator, nicht für ORGANIZER oder QUESTIONER) */}
+                                                    {totalParticipants > 0 && (derivedRole === "PARTICIPANT" || isCurrentUserPresenter) && (
                                                         <div className="flex-shrink-0 flex justify-center pt-2">
                                                             <Button
                                                                 onClick={startScreenShare}
@@ -1903,7 +1897,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                                         <div className="flex-1 min-w-0">
                                                             <div className="font-medium truncate">{organizer.firstName} {organizer.lastName ?? ""}</div>
                                                             <div className="text-xs text-muted-foreground">
-                                                                {currentPresenter?.id === organizer.id ? "Organizer & Präsentator" : "Organizer"}
+                                                                Organizer
                                                             </div>
                                                         </div>
                                                     </div>
@@ -1923,19 +1917,8 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                                                 <TooltipContent>Präsentator entfernen</TooltipContent>
                                                             </Tooltip>
                                                         ) : (
-                                                            <Tooltip>
-                                                                <TooltipTrigger asChild>
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="ghost"
-                                                                        onClick={() => handleSetPresenter(organizer.id)}
-                                                                        className="h-8 w-8 p-0"
-                                                                    >
-                                                                        <Crown className="w-4 h-4" />
-                                                                    </Button>
-                                                                </TooltipTrigger>
-                                                                <TooltipContent>Als Präsentator setzen</TooltipContent>
-                                                            </Tooltip>
+                                                            /* Organizer kann nicht zum Präsentator gemacht werden */
+                                                            <></>
                                                         )}
                                                     </div>
                                                 </div>
@@ -1974,8 +1957,9 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                                                     {currentParticipants.map((u) => {
                                                         const uc = conference?.participants.find(p => p.userId === u.id);
                                                         const role = uc?.role as ExtendedRole | undefined;
-                                                        const isQuestioner = role === "QUESTIONER";
                                                         const isPresenter = uc?.isPresenter ?? false;
+                                                        // Wenn Präsentator, dann nicht mehr als Questioner
+                                                        const isQuestioner = !isPresenter && role === "QUESTIONER";
                                                         return (
                                                             <div key={u.id} className="p-3 rounded-lg border bg-card flex items-center justify-between hover:bg-accent/50 transition-colors">
                                                                 <div className="flex items-center gap-3 flex-1 min-w-0">

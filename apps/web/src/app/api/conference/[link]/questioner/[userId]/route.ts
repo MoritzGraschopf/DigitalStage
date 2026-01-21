@@ -84,7 +84,8 @@ export async function POST(
             }
         }
 
-        // Maximale Anzahl: 2 wenn Organizer präsentiert, 3 wenn externer Präsentator
+        // Maximale Anzahl: 2 wenn kein externer Präsentator, 3 wenn externer Präsentator vorhanden
+        // (Organizer kann nicht präsentieren)
         const maxWebRTC = hasExternalPresenter ? 3 : 2;
 
         if (webrtcCount >= maxWebRTC) {
