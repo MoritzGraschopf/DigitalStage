@@ -47,8 +47,12 @@ export async function POST(req: NextRequest){
         let presenterData: { isPresenter: boolean } | undefined = undefined;
         if (presenterUserId) {
             // Präsentator muss in userIds oder organizerId sein
-            if (presenterUserId !== organizerId && !userIds.includes(presenterUserId)) {
-                return NextResponse.json({ message: "Presenter must be organizer or one of the participants" }, { status: 400 });
+            // Organizer kann nicht als Präsentator gesetzt werden
+            if (presenterUserId === organizerId) {
+                return NextResponse.json({ message: "Organizer cannot be presenter" }, { status: 400 });
+            }
+            if (!userIds.includes(presenterUserId)) {
+                return NextResponse.json({ message: "Presenter must be one of the participants" }, { status: 400 });
             }
             presenterData = { isPresenter: true };
         }
@@ -67,7 +71,7 @@ export async function POST(req: NextRequest){
                         {
                             userId: organizerId,
                             role: 'ORGANIZER',
-                            ...(presenterUserId === organizerId ? presenterData : {})
+                            // Organizer kann nicht Präsentator sein
                         },
                         ...userIds.map((uid: string) => ({
                             userId: uid,

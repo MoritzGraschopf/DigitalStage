@@ -256,29 +256,7 @@ const NewConferenceSheet: React.FC<NewConferenceSheetProps> = ({open, setOpen}) 
                                                 <CommandList>
                                                     <CommandEmpty>Keine User gefunden.</CommandEmpty>
                                                     <CommandGroup heading="Als Präsentator auswählen">
-                                                        {/* Organizer (selbst) */}
-                                                        {user && (
-                                                            <CommandItem
-                                                                onSelect={() => {
-                                                                    const newValue = presenterUserId === user.id ? undefined : user.id;
-                                                                    form.setValue("presenterUserId", newValue);
-                                                                }}
-                                                                className="flex items-center gap-2"
-                                                            >
-                                                                <div onClick={(e) => e.stopPropagation()}>
-                                                                    <Checkbox
-                                                                        checked={presenterUserId === user.id}
-                                                                        onCheckedChange={() => {
-                                                                            const newValue = presenterUserId === user.id ? undefined : user.id;
-                                                                            form.setValue("presenterUserId", newValue);
-                                                                        }}
-                                                                    />
-                                                                </div>
-                                                                <span className="truncate">
-                                                                    {user.firstName} {user.lastName ?? ""} (Du - Organizer)
-                                                                </span>
-                                                            </CommandItem>
-                                                        )}
+                                                        {/* Organizer kann nicht als Präsentator ausgewählt werden */}
                                                         {/* Alle anderen User */}
                                                         {users
                                                             .filter((u) => user ? u.id !== user.id : true)
