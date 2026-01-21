@@ -321,14 +321,37 @@ export function useWebRTC(params: {
                         remoteStreamsRef.current.set(fromUserId, managedStream);
                     }
 
-                    // alte Tracks vom selben Typ ersetzen
-                    const existing = managedStream.getTracks().filter((t) => t.kind === track.kind);
-                    for (const existingTrack of existing) {
-                        managedStream.removeTrack(existingTrack);
-                        try {
-                            existingTrack.stop();
-                        } catch {
-                            /* ignore */
+                    // Für Video-Tracks: Unterscheide anhand des Labels (Kamera vs. Screen)
+                    // Für Audio-Tracks: Ersetze alte Audio-Tracks (nur ein Audio-Track pro User)
+                    if (track.kind === "video") {
+                        const trackLabel = track.label.toLowerCase();
+                        const isScreenTrack = trackLabel.includes('screen') || trackLabel.includes('display') || trackLabel.includes('window') || trackLabel.includes('monitor');
+                        
+                        // Entferne nur Tracks vom gleichen Typ (Kamera oder Screen)
+                        const existing = managedStream.getVideoTracks().filter((t) => {
+                            const existingLabel = t.label.toLowerCase();
+                            const existingIsScreen = existingLabel.includes('screen') || existingLabel.includes('display') || existingLabel.includes('window') || existingLabel.includes('monitor');
+                            return isScreenTrack === existingIsScreen;
+                        });
+                        
+                        for (const existingTrack of existing) {
+                            managedStream.removeTrack(existingTrack);
+                            try {
+                                existingTrack.stop();
+                            } catch {
+                                /* ignore */
+                            }
+                        }
+                    } else {
+                        // Audio: Ersetze alle Audio-Tracks (nur ein Audio-Stream pro User)
+                        const existing = managedStream.getTracks().filter((t) => t.kind === track.kind);
+                        for (const existingTrack of existing) {
+                            managedStream.removeTrack(existingTrack);
+                            try {
+                                existingTrack.stop();
+                            } catch {
+                                /* ignore */
+                            }
                         }
                     }
 
