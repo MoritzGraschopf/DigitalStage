@@ -976,6 +976,32 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
         reconnectCount: ws.reconnectCount,
     });
 
+    // Screenshare automatisch stoppen, wenn User nicht mehr Präsentator ist
+    const prevIsPresenterRef = useRef(isCurrentUserPresenter);
+    useEffect(() => {
+        // Wenn User vorher Präsentator war, aber jetzt nicht mehr ist, Screenshare stoppen
+        if (prevIsPresenterRef.current && !isCurrentUserPresenter && isScreenSharing) {
+            console.log("User ist nicht mehr Präsentator -> Screenshare stoppen");
+            stopScreenShare();
+        }
+        prevIsPresenterRef.current = isCurrentUserPresenter;
+    }, [isCurrentUserPresenter, isScreenSharing, stopScreenShare]);
+
+    // Track vorherigen Screenshare-Status, um Updates zu triggern
+    const prevScreenSharingRef = useRef(isScreenSharing);
+    useEffect(() => {
+        // Wenn Screenshare beendet wurde (von true zu false), kurz warten und dann prüfen ob Update nötig
+        if (prevScreenSharingRef.current && !isScreenSharing) {
+            console.log("Screenshare beendet -> prüfe ob Update nötig");
+            // Kurz warten, damit Streams sich aktualisieren können
+            const timer = setTimeout(() => {
+                // Re-render wird durch State-Änderungen automatisch getriggert
+            }, 100);
+            return () => clearTimeout(timer);
+        }
+        prevScreenSharingRef.current = isScreenSharing;
+    }, [isScreenSharing]);
+
     // Map peerId (userId) zu User-Namen
     const getUserName = useCallback((peerId: string): string => {
         const u = userById[peerId];
@@ -1018,15 +1044,20 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
         return { participantStreams: participants, screenShareStreams: screens };
     }, [remoteStreams]);
 
-    // Aktiver Screenshare (erster gefundener)
+    // Aktiver Screenshare (lokaler Screenshare hat Priorität, sonst erster gefundener)
     const activeScreenShare = useMemo(() => {
+        // Wenn lokaler Screenshare aktiv ist, hat dieser Priorität
+        if (isScreenSharing && localScreenStream) {
+            return { userId: user?.id ?? "", stream: localScreenStream, userName: "Du" };
+        }
+        // Sonst erster gefundener Screenshare von anderen
         const entries = Object.entries(screenShareStreams);
         if (entries.length > 0) {
             const [userId, stream] = entries[0];
             return { userId, stream, userName: getUserName(userId) };
         }
         return null;
-    }, [screenShareStreams, getUserName]);
+    }, [screenShareStreams, getUserName, isScreenSharing, localScreenStream, user?.id]);
 
     // Liste aller WebRTC-Teilnehmer mit Status
     const webrtcParticipants = useMemo(() => {
