@@ -94,9 +94,9 @@ start_ffmpeg() {
     -map 0:v:1? -map 0:a:1? \
     -vsync 0 \
     -vf "scale=w=1280:h=720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2" \
-    -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p \
-    -b:v 2500k -maxrate 3500k -bufsize 10500k \
-    -g 30 -keyint_min 30 -sc_threshold 0 -bf 0 \
+    -c:v libx264 -preset fast -pix_fmt yuv420p \
+    -b:v 4000k -maxrate 5000k -bufsize 15000k \
+    -g 60 -keyint_min 60 -sc_threshold 40 -bf 2 \
     -force_key_frames "expr:gte(t,n_forced*1)" \
     -c:a aac -b:a 96k -ar 48000 \
     -f hls -hls_time "$HLS_TIME" -hls_list_size "$HLS_LIST_SIZE" \
@@ -106,9 +106,9 @@ start_ffmpeg() {
     -map 0:v:2? -map 0:a:2? \
     -vsync 0 \
     -vf "scale=w=1280:h=720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2" \
-    -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p \
-    -b:v 2500k -maxrate 3500k -bufsize 10500k \
-    -g 30 -keyint_min 30 -sc_threshold 0 -bf 0 \
+    -c:v libx264 -preset fast -pix_fmt yuv420p \
+    -b:v 4000k -maxrate 5000k -bufsize 15000k \
+    -g 60 -keyint_min 60 -sc_threshold 40 -bf 2 \
     -force_key_frames "expr:gte(t,n_forced*1)" \
     -c:a aac -b:a 96k -ar 48000 \
     -f hls -hls_time "$HLS_TIME" -hls_list_size "$HLS_LIST_SIZE" \
@@ -118,9 +118,9 @@ start_ffmpeg() {
     -map 0:v:3? -map 0:a:3? \
     -vsync 0 \
     -vf "scale=w=1280:h=720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2" \
-    -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p \
-    -b:v 2500k -maxrate 3500k -bufsize 10500k \
-    -g 30 -keyint_min 30 -sc_threshold 0 -bf 0 \
+    -c:v libx264 -preset fast -pix_fmt yuv420p \
+    -b:v 4000k -maxrate 5000k -bufsize 15000k \
+    -g 60 -keyint_min 60 -sc_threshold 40 -bf 2 \
     -force_key_frames "expr:gte(t,n_forced*1)" \
     -c:a aac -b:a 96k -ar 48000 \
     -f hls -hls_time "$HLS_TIME" -hls_list_size "$HLS_LIST_SIZE" \
