@@ -972,11 +972,16 @@ wss.on("connection", (ws) => {
         }
 
         if (msg.type === "PresenterChanged") {
+            const oldPresenterId = presenterByConf.get(msg.conferenceId);
+            console.log(`[PresenterChanged] Conference ${msg.conferenceId}: ${oldPresenterId || 'none'} -> ${msg.presenterUserId || 'none'}`);
+            
             // Präsentator-Status tracken
             if (msg.presenterUserId) {
                 presenterByConf.set(msg.conferenceId, msg.presenterUserId);
+                console.log(`[PresenterChanged] Set presenter for conference ${msg.conferenceId}: ${msg.presenterUserId}`);
             } else {
                 presenterByConf.delete(msg.conferenceId);
+                console.log(`[PresenterChanged] Removed presenter for conference ${msg.conferenceId}`);
             }
             
             // HLS-Bindings neu setzen, da sich die Rollen geändert haben (debounced)
@@ -1044,6 +1049,7 @@ wss.on("connection", (ws) => {
         // 1) join
         if (msg.type === "sfu:join") { // ✅ CHANGED
             const {requestId, userId, conferenceId, role, presenterUserId} = msg;
+            console.log(`[JOIN] User ${userId} joining conference ${conferenceId} as ${role}, presenterUserId: ${presenterUserId || 'none'}`);
             try {
                 ws.userId = userId;
                 ws.conferenceId = conferenceId;
@@ -1062,10 +1068,16 @@ wss.on("connection", (ws) => {
                     }
                 }
 
-                // ✅ NEW: Präsentator-Status beim Join initialisieren (falls vorhanden)
-                if (presenterUserId && !presenterByConf.has(conferenceId)) {
+                // ✅ NEW: Präsentator-Status beim Join initialisieren/aktualisieren (falls vorhanden)
+                if (presenterUserId) {
+                    const oldPresenterId = presenterByConf.get(conferenceId);
                     presenterByConf.set(conferenceId, presenterUserId);
-                    console.log(`[JOIN] Initialized presenter for conference ${conferenceId}: ${presenterUserId}`);
+                    if (oldPresenterId !== presenterUserId) {
+                        console.log(`[JOIN] ${oldPresenterId ? 'Updated' : 'Initialized'} presenter for conference ${conferenceId}: ${presenterUserId} (was: ${oldPresenterId || 'none'})`);
+                    }
+                } else {
+                    const currentPresenterId = presenterByConf.get(conferenceId);
+                    console.log(`[JOIN] No presenterUserId provided, current presenter in map: ${currentPresenterId || 'none'}`);
                 }
 
                 // HLS-Infrastruktur initialisieren, wenn jemand als WebRTC-Teilnehmer joint (nicht Viewer)
@@ -1179,11 +1191,25 @@ wss.on("connection", (ws) => {
                 // Screen-Sharing nur für Präsentatoren erlauben
                 if (appData?.mediaTag === "screen" || appData?.source === "screen") {
                     const presenterId = presenterByConf.get(conferenceId);
-                    console.log("[SCREEN PRODUCE]", { conferenceId, userId, presenterId, role: peer?.role, appData });
-                    if (!presenterId)
+                    console.log("[SCREEN PRODUCE]", { 
+                        conferenceId, 
+                        userId, 
+                        presenterId, 
+                        presenterByConfKeys: Array.from(presenterByConf.keys()),
+                        presenterByConfValues: Array.from(presenterByConf.values()),
+                        role: peer?.role, 
+                        appData 
+                    });
+                    if (!presenterId) {
+                        console.error(`[SCREEN PRODUCE ERROR] No presenter selected for conference ${conferenceId}. presenterByConf state:`, 
+                            Array.from(presenterByConf.entries()).filter(([k]) => k === conferenceId));
                         throw new Error("No presenter selected");
-                    if (userId !== presenterId)
+                    }
+                    if (userId !== presenterId) {
+                        console.warn(`[SCREEN PRODUCE ERROR] User ${userId} tried to share screen, but presenter is ${presenterId}`);
                         throw new Error("Only the presenter is allowed to share their screen");
+                    }
+                    console.log(`[SCREEN PRODUCE OK] User ${userId} (presenter ${presenterId}) starting screen share`);
                 }
 
 
