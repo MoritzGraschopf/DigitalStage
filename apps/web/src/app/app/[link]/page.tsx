@@ -541,7 +541,6 @@ function HLSViewer({
                     ref={screenVideoRef}
                     autoPlay
                     playsInline
-                    muted
                     className="w-full h-full object-contain"
                 />
 
@@ -570,7 +569,6 @@ function HLSViewer({
                                     ref={s.ref}
                                     autoPlay
                                     playsInline
-                                    muted
                                     className="w-full h-full object-cover"
                                 />
 
