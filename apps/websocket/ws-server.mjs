@@ -274,10 +274,14 @@ async function cleanupHls(confId) {
 
 async function cleanupPeer(confId, userId) {
     const room = rtcRooms.get(confId);
-    if (!room) return;
+    let needsRefresh = false;
+
+    if (!room)
+        return;
 
     const peer = room.peers.get(userId);
-    if (!peer) return;
+    if (!peer)
+        return;
 
     for (const c of peer.consumers.values()) {
         try {
@@ -306,6 +310,24 @@ async function cleanupPeer(confId, userId) {
 
     room.peers.delete(userId);
     broadcastRoom(confId, userId, {type: "sfu:peer-left", userId});
+
+
+    if (presenterByConf.get(confId) === userId) {
+        presenterByConf.delete(confId);
+        needsRefresh = true;
+    }
+    if (questionerByConf.get(confId) === userId) {
+        questionerByConf.delete(confId);
+        needsRefresh = true;
+    }
+    if (organizerByConf.get(confId) === userId) {
+        organizerByConf.delete(confId); // optional
+        needsRefresh = true;
+    }
+
+    if (needsRefresh && room.peers.size > 0) {
+        scheduleRefresh(confId);
+    }
 
     if (room.peers.size === 0) {
         await cleanupHls(confId);
@@ -1145,15 +1167,19 @@ wss.on("connection", (ws) => {
                 const room = rtcRooms.get(conferenceId);
                 const peer = room?.peers.get(userId);
                 const transport = peer?.transports.get(transportId);
-                if (!transport) throw new Error("transport not found");
+                if (!transport)
+                    throw new Error("transport not found");
 
                 // Screen-Sharing nur für Präsentatoren erlauben
                 if (appData?.mediaTag === "screen" || appData?.source === "screen") {
                     const presenterId = presenterByConf.get(conferenceId);
-                    if (userId !== presenterId) {
+                    console.log("[SCREEN PRODUCE]", { conferenceId, userId, presenterId, role: peer?.role, appData });
+                    if (!presenterId)
+                        throw new Error("No presenter selected");
+                    if (userId !== presenterId)
                         throw new Error("Only the presenter is allowed to share their screen");
-                    }
                 }
+
 
                 if (peer?.role === "QUESTIONER") {
                     // Questioners können generell kein Screen-Sharing starten (wird oben bereits abgefangen)
