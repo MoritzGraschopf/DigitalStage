@@ -613,7 +613,11 @@ export function useWebRTC(params: {
 
         try {
             const stream = await navigator.mediaDevices.getDisplayMedia({
-                video: true
+                video: {
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 },
+                    frameRate: { ideal: 15, max: 30 }
+                }
             });
 
             const track = stream.getVideoTracks()[0];
@@ -623,6 +627,7 @@ export function useWebRTC(params: {
                 return;
             }
 
+            track.contentHint = "detail";
             screenStreamRef.current = stream;
             setLocalScreenStream(stream);
             track.onended = () => {
@@ -632,7 +637,13 @@ export function useWebRTC(params: {
 
             const producer = await sendTransport.produce({
                 track,
-                // Markiere Screen-Sharing für serverseitige Validierung
+                encodings: [{
+                    maxBitrate: 6_000_000,
+                    maxFramerate: 15
+                }],
+                codecOptions: {
+                    videoGoogleStartBitrate: 3000
+                },
                 appData: { mediaTag: "screen", source: "screen" },
             });
 
@@ -763,7 +774,15 @@ export function useWebRTC(params: {
 
                 let stream: MediaStream | null;
                 try {
-                    stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+                    stream = await navigator.mediaDevices.getUserMedia(
+                        {
+                            audio: true,
+                            video: {
+                                width: { ideal: 1280 },
+                                height: { ideal: 720 },
+                                frameRate: { ideal: 30, max: 30 }
+                            }
+                        });
                 } catch (e) {
                     console.error("getUserMedia failed:", e);
                     stream = null;
@@ -780,12 +799,12 @@ export function useWebRTC(params: {
                             await sendTransport.produce({ 
                                 track: vTrack,
                                 encodings: [{
-                                    maxBitrate: 1_500_000,
+                                    maxBitrate: 2_500_000,
                                     maxFramerate: 30,
                                     scalabilityMode: "L1T1"
                                 }],
                                 codecOptions: {
-                                    videoGoogleStartBitrate: 1000
+                                    videoGoogleStartBitrate: 1500
                                 },
                                 appData: { mediaTag: "cam" }
                             });
