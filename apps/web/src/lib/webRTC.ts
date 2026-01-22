@@ -638,11 +638,11 @@ export function useWebRTC(params: {
             const producer = await sendTransport.produce({
                 track,
                 encodings: [{
-                    maxBitrate: 12_000_000,
+                    maxBitrate: 6_000_000,
                     maxFramerate: 15
                 }],
                 codecOptions: {
-                    videoGoogleStartBitrate: 8000
+                    videoGoogleStartBitrate: 3000
                 },
                 appData: { mediaTag: "screen", source: "screen" },
             });
