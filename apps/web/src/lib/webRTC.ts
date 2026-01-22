@@ -157,8 +157,9 @@ export function useWebRTC(params: {
     conferenceId: string;
     role: Role;
     reconnectCount?: number;
+    presenterUserId?: string | null; // Aktueller Präsentator-Status für Server-Initialisierung
 }) {
-    const { socket, send, userId, conferenceId, role, reconnectCount = 0 } = params;
+    const { socket, send, userId, conferenceId, role, reconnectCount = 0, presenterUserId } = params;
     
     // Ref für HLS Dummy-Producer
     const hlsDummyRef = useRef<{ stop: () => void } | null>(null);
@@ -663,7 +664,10 @@ export function useWebRTC(params: {
             const wantSend = role !== "VIEWER";
 
             // 1) join
-            const joinRes = await request<SfuJoinRes>("sfu:join", { role });
+            const joinRes = await request<SfuJoinRes>("sfu:join", { 
+                role,
+                presenterUserId: presenterUserId || undefined // Aktueller Präsentator-Status mitsenden
+            });
             if (!mounted) return;
 
             const device = new mediasoupClient.Device();

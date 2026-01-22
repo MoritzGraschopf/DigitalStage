@@ -974,6 +974,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
         conferenceId: conference?.id ?? "",
         role: derivedRole,
         reconnectCount: ws.reconnectCount,
+        presenterUserId: currentPresenter?.id || null, // Aktueller Präsentator-Status mitsenden
     });
 
     // Screenshare automatisch stoppen, wenn User nicht mehr Präsentator ist
