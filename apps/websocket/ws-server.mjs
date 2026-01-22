@@ -1043,7 +1043,7 @@ wss.on("connection", (ws) => {
 
         // 1) join
         if (msg.type === "sfu:join") { // ✅ CHANGED
-            const {requestId, userId, conferenceId, role} = msg;
+            const {requestId, userId, conferenceId, role, presenterUserId} = msg;
             try {
                 ws.userId = userId;
                 ws.conferenceId = conferenceId;
@@ -1060,6 +1060,12 @@ wss.on("connection", (ws) => {
                         }
                         await cleanupPeer(conferenceId, userId);
                     }
+                }
+
+                // ✅ NEW: Präsentator-Status beim Join initialisieren (falls vorhanden)
+                if (presenterUserId && !presenterByConf.has(conferenceId)) {
+                    presenterByConf.set(conferenceId, presenterUserId);
+                    console.log(`[JOIN] Initialized presenter for conference ${conferenceId}: ${presenterUserId}`);
                 }
 
                 // HLS-Infrastruktur initialisieren, wenn jemand als WebRTC-Teilnehmer joint (nicht Viewer)
