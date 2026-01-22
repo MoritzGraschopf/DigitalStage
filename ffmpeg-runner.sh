@@ -5,7 +5,7 @@ SDP="/opt/digitalstage/sdp/input.sdp"
 HLS="/opt/digitalstage/hls"
 ACTIVE="/opt/digitalstage/sdp/active"
 
-# ===== Tuning =====
+
 ACTIVE_STALE_SEC=10          # wenn active älter als X sec -> conference gilt als tot
 FIRST_OUTPUT_DEADLINE=60     # wenn nach X sec gar nichts im HLS-Ordner landet -> restart
 WARMUP_SEC=25                # in den ersten X sec kein Stall-Check (Startup/Keyframes)
@@ -14,7 +14,7 @@ CHECK_INTERVAL_SEC=1
 
 # HLS Verhalten (für Stabilität + spätere MP4-Konvertierung)
 HLS_TIME=1
-HLS_LIST_SIZE=8              # 2 ist viel zu knapp, 6-10 ist realistisch
+HLS_LIST_SIZE=8 # 2 ist viel zu knapp, 6-10 ist realistisch
 HLS_FLAGS="independent_segments+temp_file"
 # Optional später, wenn alles stabil ist:
 # HLS_FLAGS="delete_segments+independent_segments+temp_file"
@@ -82,8 +82,10 @@ start_ffmpeg() {
     \
     -map 0:v:0? -map 0:a:0? \
     -vsync 0 \
-    -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p \
-    -g 30 -keyint_min 30 -sc_threshold 0 -bf 0 \
+    -vf "scale=w=1920:h=1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" \
+    -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p \
+    -crf 20 -maxrate 8000k -bufsize 12000k \
+    -g 15 -keyint_min 15 -sc_threshold 0 -bf 0 \
     -force_key_frames "expr:gte(t,n_forced*1)" \
     -c:a aac -b:a 96k -ar 48000 \
     -f hls -hls_time "$HLS_TIME" -hls_list_size "$HLS_LIST_SIZE" \
@@ -92,7 +94,9 @@ start_ffmpeg() {
     \
     -map 0:v:1? -map 0:a:1? \
     -vsync 0 \
-    -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p \
+    -vf "scale=w=1280:h=720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2" \
+    -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p \
+    -crf 23 -maxrate 3500k -bufsize 5000k \
     -g 30 -keyint_min 30 -sc_threshold 0 -bf 0 \
     -force_key_frames "expr:gte(t,n_forced*1)" \
     -c:a aac -b:a 96k -ar 48000 \
@@ -102,7 +106,9 @@ start_ffmpeg() {
     \
     -map 0:v:2? -map 0:a:2? \
     -vsync 0 \
-    -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p \
+    -vf "scale=w=1280:h=720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2" \
+    -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p \
+    -crf 23 -maxrate 3500k -bufsize 5000k \
     -g 30 -keyint_min 30 -sc_threshold 0 -bf 0 \
     -force_key_frames "expr:gte(t,n_forced*1)" \
     -c:a aac -b:a 96k -ar 48000 \
@@ -112,7 +118,9 @@ start_ffmpeg() {
     \
     -map 0:v:3? -map 0:a:3? \
     -vsync 0 \
-    -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p \
+    -vf "scale=w=1280:h=720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2" \
+    -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p \
+    -crf 23 -maxrate 3500k -bufsize 5000k \
     -g 30 -keyint_min 30 -sc_threshold 0 -bf 0 \
     -force_key_frames "expr:gte(t,n_forced*1)" \
     -c:a aac -b:a 96k -ar 48000 \
