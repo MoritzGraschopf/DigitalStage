@@ -82,10 +82,10 @@ start_ffmpeg() {
     -map 0:v:0? -map 0:a:0? \
     -vsync 0 \
     -vf "scale=w=1920:h=1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" \
-    -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p \
-    -b:v 6000k -maxrate 8000k -bufsize 24000k \
-    -g 15 -keyint_min 15 -sc_threshold 0 -bf 0 \
-    -force_key_frames "expr:gte(t,n_forced*1)" \
+    -c:v libx264 -preset fast -pix_fmt yuv420p \
+    -b:v 12000k -maxrate 16000k -bufsize 48000k \
+    -g 30 -keyint_min 30 -sc_threshold 40 -bf 2 \
+    -force_key_frames "expr:gte(t,n_forced*2)" \
     -c:a aac -b:a 96k -ar 48000 \
     -f hls -hls_time "$HLS_TIME" -hls_list_size "$HLS_LIST_SIZE" \
     -hls_flags "$HLS_FLAGS" -hls_start_number_source epoch \
