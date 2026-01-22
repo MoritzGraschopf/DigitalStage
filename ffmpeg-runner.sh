@@ -73,10 +73,9 @@ start_ffmpeg() {
   ffmpeg -hide_banner -loglevel info -stats \
     -protocol_whitelist file,udp,rtp \
     -reorder_queue_size 1024 \
-    -rtbufsize 100M \
-    -max_delay 500000 \
+    -rtbufsize 500M \
+    -max_delay 2000000 \
     -fflags +genpts+discardcorrupt \
-    -flags low_delay \
     -analyzeduration 1M -probesize 1M \
     -i "$SDP" \
     \
@@ -84,8 +83,8 @@ start_ffmpeg() {
     -vsync 0 \
     -vf "scale=w=1920:h=1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" \
     -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p \
-    -crf 20 -maxrate 8000k -bufsize 12000k \
-    -g 15 -keyint_min 15 -sc_threshold 0 -bf 0 \
+    -b:v 6000k -maxrate 8000k -bufsize 24000k \
+    -g 30 -keyint_min 30 -sc_threshold 0 -bf 0 \
     -force_key_frames "expr:gte(t,n_forced*1)" \
     -c:a aac -b:a 96k -ar 48000 \
     -f hls -hls_time "$HLS_TIME" -hls_list_size "$HLS_LIST_SIZE" \
@@ -96,7 +95,7 @@ start_ffmpeg() {
     -vsync 0 \
     -vf "scale=w=1280:h=720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2" \
     -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p \
-    -crf 23 -maxrate 3500k -bufsize 5000k \
+    -b:v 2500k -maxrate 3500k -bufsize 10500k \
     -g 30 -keyint_min 30 -sc_threshold 0 -bf 0 \
     -force_key_frames "expr:gte(t,n_forced*1)" \
     -c:a aac -b:a 96k -ar 48000 \
@@ -108,7 +107,7 @@ start_ffmpeg() {
     -vsync 0 \
     -vf "scale=w=1280:h=720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2" \
     -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p \
-    -crf 23 -maxrate 3500k -bufsize 5000k \
+    -b:v 2500k -maxrate 3500k -bufsize 10500k \
     -g 30 -keyint_min 30 -sc_threshold 0 -bf 0 \
     -force_key_frames "expr:gte(t,n_forced*1)" \
     -c:a aac -b:a 96k -ar 48000 \
@@ -120,7 +119,7 @@ start_ffmpeg() {
     -vsync 0 \
     -vf "scale=w=1280:h=720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2" \
     -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p \
-    -crf 23 -maxrate 3500k -bufsize 5000k \
+    -b:v 2500k -maxrate 3500k -bufsize 10500k \
     -g 30 -keyint_min 30 -sc_threshold 0 -bf 0 \
     -force_key_frames "expr:gte(t,n_forced*1)" \
     -c:a aac -b:a 96k -ar 48000 \
