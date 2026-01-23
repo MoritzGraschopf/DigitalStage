@@ -139,16 +139,16 @@ export default function ConferenceChat({conference, disabled}: { conference: Con
     }
 
     return (
-        <div className="h-full flex flex-col gap-2 min-h-0">
+        <div className="h-full flex flex-col min-h-0">
             {/* Wichtig: viewportClassName="relative" für den Floating-Button */}
-            <div className="relative flex-1 min-h-0">
+            <div className="relative flex-1 min-h-0 overflow-hidden">
                 <ScrollArea
                     className="h-full"
                     viewportRef={viewportRef}
-                    viewportClassName="h-full w-full pt-16"
+                    viewportClassName="h-full w-full"
                     onViewportScroll={handleViewportScroll}
                 >
-                    <div className="px-2 pl-2 pr-4 space-y-2">
+                    <div className="px-2 pl-2 pr-4 py-4 space-y-2">
                         {messages.map((message, index) => (
                             <div
                                 key={index}
@@ -180,24 +180,26 @@ export default function ConferenceChat({conference, disabled}: { conference: Con
                     </div>
                 )}
             </div>
-            <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-[1fr_min-content] m-2 gap-2 flex-shrink-0">
-                    <FormField
-                        control={form.control}
-                        name="message"
-                        render={({field}) => (
-                            <FormItem>
-                                <FormControl>
-                                    <Input type="text" {...field} autoComplete="off" />
-                                </FormControl>
-                            </FormItem>
-                        )}
-                    />
-                    <Button size="icon" type="submit" disabled={disabled}>
-                        <SendHorizonal />
-                    </Button>
-                </form>
-            </Form>
+            <div className="flex-shrink-0 border-t p-2">
+                <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-[1fr_min-content] gap-2">
+                        <FormField
+                            control={form.control}
+                            name="message"
+                            render={({field}) => (
+                                <FormItem>
+                                    <FormControl>
+                                        <Input type="text" {...field} autoComplete="off" />
+                                    </FormControl>
+                                </FormItem>
+                            )}
+                        />
+                        <Button size="icon" type="submit" disabled={disabled}>
+                            <SendHorizonal />
+                        </Button>
+                    </form>
+                </Form>
+            </div>
         </div>
     )
 }
