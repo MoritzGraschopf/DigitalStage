@@ -186,7 +186,7 @@ export function VideoTile({
     const hasAudio = !!stream?.getAudioTracks().some((t) => t.readyState !== "ended");
 
     return (
-        <div className={`relative rounded-xl overflow-hidden bg-gradient-to-br from-background to-muted/30 ${noBorder ? '' : 'border shadow-lg hover:shadow-xl'} transition-all duration-300 group ${className}`}>
+        <div className={`relative ${noBorder ? 'rounded-none' : 'rounded-xl'} overflow-hidden bg-gradient-to-br from-background to-muted/30 ${noBorder ? '' : 'border shadow-lg hover:shadow-xl'} transition-all duration-300 group ${className}`}>
             <div className="relative aspect-video bg-gradient-to-br from-muted/20 to-muted/10">
                 <video
                     ref={ref}

@@ -64,7 +64,7 @@ export function ConferenceVideoLayout({
                             </div>
                         ) : (
                             <div className="h-full flex gap-2 sm:gap-3 overflow-x-auto pb-2">
-                                {hasLocal && !isScreenSharing && (
+                                {hasLocal && (
                                     <div className="flex-shrink-0 w-48 sm:w-56 md:w-64">
                                         <VideoTile
                                             stream={localStream}
