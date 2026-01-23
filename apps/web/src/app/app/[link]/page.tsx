@@ -154,7 +154,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
                 />
             </div>
 
-            <div className="m-2 lg:ml-2 border rounded-xl relative h-full lg:h-auto bg-gradient-to-br from-background via-background to-muted/5 overflow-hidden shadow-inner flex-1 min-h-0">
+            <div className="m-2 lg:ml-2 lg:my-2 border rounded-xl relative h-full lg:h-auto bg-gradient-to-br from-background via-background to-muted/5 overflow-hidden shadow-inner flex-1 min-h-0">
                 {disabled ? (
                     <div className="h-full justify-center items-center flex flex-col gap-4 p-8">
                         <div className="text-5xl mb-2">🔴</div>
@@ -241,7 +241,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
             </div>
 
             {/* Chat - auf mobil als Sheet, auf Desktop als Sidebar */}
-            <div className="hidden lg:block m-2 lg:mx-2 border rounded-xl h-full flex-grow overflow-hidden bg-gradient-to-br from-background via-background to-muted/5 shadow-inner">
+            <div className="hidden lg:block m-2 lg:mr-2 lg:my-2 border rounded-xl overflow-hidden bg-gradient-to-br from-background via-background to-muted/5 shadow-inner flex flex-col h-full min-h-0">
                 <ConferenceChat conference={conference} disabled={disabled} />
             </div>
             
