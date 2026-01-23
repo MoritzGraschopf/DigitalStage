@@ -669,7 +669,7 @@ export function useWebRTC(params: {
     useEffect(() => {
         if (!userId || !conferenceId) return;
 
-        const key = `${conferenceId}|${userId}`;
+        const key = `${conferenceId}|${userId}|${role}`;
         if (initKeyRef.current === key) return;
         initKeyRef.current = key;
 

@@ -139,7 +139,7 @@ export default function ConferenceChat({conference, disabled}: { conference: Con
     }
 
     return (
-        <div className="h-full flex flex-col min-h-0">
+        <div className="h-full flex flex-col min-h-0 max-h-full">
             {/* Wichtig: viewportClassName="relative" für den Floating-Button */}
             <div className="relative flex-1 min-h-0 overflow-hidden">
                 <ScrollArea
@@ -180,7 +180,7 @@ export default function ConferenceChat({conference, disabled}: { conference: Con
                     </div>
                 )}
             </div>
-            <div className="flex-shrink-0 border-t p-2">
+            <div className="flex-shrink-0 border-t bg-background p-2">
                 <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-[1fr_min-content] gap-2">
                         <FormField

@@ -81,13 +81,13 @@ export function ParticipantsSheet({
                 {trigger || defaultTrigger}
             </SheetTrigger>
             <SheetContent side="right" className="w-full sm:w-96 overflow-y-auto">
-                <SheetHeader className="mb-6">
+                <SheetHeader className="mb-8">
                     <SheetTitle>Teilnehmerübersicht</SheetTitle>
-                    <SheetDescription className="mb-4">
+                    <SheetDescription className="mt-2 mb-6">
                         Alle aktiven WebRTC-Verbindungen in dieser Konferenz
                     </SheetDescription>
                 </SheetHeader>
-                <div className="space-y-4">
+                <div className="space-y-4 mb-6">
                     {webrtcParticipants.length === 0 ? (
                         <div className="text-center text-muted-foreground py-8">
                             <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
@@ -150,15 +150,15 @@ export function ParticipantsSheet({
                         <Separator className="my-8" />
                         
                         <div className="space-y-8">
-                            <div className="space-y-4">
+                            <div className="space-y-3 mb-6">
                                 <h3 className="text-sm font-medium">Verwaltung</h3>
-                                <p className="text-xs text-muted-foreground">
+                                <p className="text-xs text-muted-foreground mt-2">
                                     {remainingSlots > 0 ? `Du kannst noch ${remainingSlots - selectedUserIds.length} von ${remainingSlots} möglichen hinzufügen.` : "Maximale Teilnehmeranzahl erreicht."}
                                 </p>
                             </div>
 
                             {organizer && (
-                                <div className="space-y-4">
+                                <div className="space-y-3 mb-6">
                                     <div className="flex items-center gap-2 text-sm font-medium">
                                         <Crown className="w-4 h-4 text-purple-500" />
                                         <span>Organizer</span>
@@ -199,12 +199,12 @@ export function ParticipantsSheet({
                             )}
 
                             {currentPresenter && currentPresenter.id !== organizer?.id && (
-                                <div className="space-y-4">
+                                <div className="space-y-3 mb-6">
                                     <div className="flex items-center gap-2 text-sm font-medium">
                                         <Crown className="w-4 h-4 text-yellow-500" />
                                         <span>Präsentator</span>
                                     </div>
-                                    <div className="p-3 rounded-lg border bg-card flex items-center justify-between">
+                                    <div className="p-3 rounded-lg border bg-card flex items-center justify-between mt-2">
                                         <div className="flex items-center gap-2">
                                             <Crown className="w-4 h-4 text-yellow-500" />
                                             <span className="font-medium">{currentPresenter.firstName} {currentPresenter.lastName ?? ""}</span>
@@ -222,9 +222,9 @@ export function ParticipantsSheet({
                             )}
 
                             {currentParticipants.length > 0 && (
-                                <div className="space-y-4">
+                                <div className="space-y-3 mb-6">
                                     <div className="text-sm font-medium">Aktuelle Teilnehmer ({currentParticipants.length})</div>
-                                    <div className="space-y-2">
+                                    <div className="space-y-2 mt-2">
                                         {currentParticipants.map((u) => {
                                             const uc = conference?.participants.find(p => p.userId === u.id);
                                             const role = uc?.role as ExtendedRole | undefined;
@@ -317,9 +317,9 @@ export function ParticipantsSheet({
                             )}
 
                             {currentViewers.length > 0 && (
-                                <div className="space-y-4">
+                                <div className="space-y-3 mb-6">
                                     <div className="text-sm font-medium">Zuschauer ({currentViewers.length})</div>
-                                    <div className="space-y-2">
+                                    <div className="space-y-2 mt-2">
                                         {currentViewers.map((u) => (
                                             <div key={u.id} className="p-3 rounded-lg border bg-card flex items-center justify-between hover:bg-accent/50 transition-colors">
                                                 <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -349,9 +349,9 @@ export function ParticipantsSheet({
                             )}
 
                             {selectedUserIds.length > 0 && (
-                                <div className="space-y-4">
+                                <div className="space-y-3 mb-6">
                                     <div className="text-sm font-medium">Wird hinzugefügt ({selectedUserIds.length})</div>
-                                    <div className="flex flex-wrap gap-2">
+                                    <div className="flex flex-wrap gap-2 mt-2">
                                         {selectedUserIds.map((id) => {
                                             const u = userById[id] || visibleUsers.find(r => r.id === id);
                                             if (!u) return null;
@@ -368,9 +368,9 @@ export function ParticipantsSheet({
 
                             <Separator className="my-8" />
 
-                            <div className="space-y-4">
+                            <div className="space-y-3 mb-6">
                                 <div className="text-sm font-medium">Neue Teilnehmer hinzufügen</div>
-                                <Command className="rounded-lg border">
+                                <Command className="rounded-lg border mt-2">
                                     <CommandInput 
                                         placeholder="User suchen..." 
                                         value={inviteQuery}
@@ -407,7 +407,7 @@ export function ParticipantsSheet({
                                 </Command>
                             </div>
 
-                            <div className="flex justify-end gap-2 pt-8">
+                            <div className="flex justify-end gap-2 pt-6 mt-4">
                                 <Button variant="ghost" onClick={() => setSelectedUserIds([])}>Abbrechen</Button>
                                 <Button onClick={handleInviteSubmit} disabled={selectedUserIds.length === 0 || remainingSlots <= 0}>
                                     {selectedUserIds.length > 0 ? `${selectedUserIds.length} hinzufügen` : "Hinzufügen"}
