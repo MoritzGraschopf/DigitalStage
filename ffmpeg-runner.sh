@@ -5,22 +5,20 @@ SDP="/opt/digitalstage/sdp/input.sdp"
 HLS="/opt/digitalstage/hls"
 ACTIVE="/opt/digitalstage/sdp/active"
 
-
 ACTIVE_STALE_SEC=10          # wenn active älter als X sec -> conference gilt als tot
 FIRST_OUTPUT_DEADLINE=60     # wenn nach X sec gar nichts im HLS-Ordner landet -> restart
 WARMUP_SEC=25                # in den ersten X sec kein Stall-Check (Startup/Keyframes)
 STALL_AFTER_SEC=15           # wenn nach Warmup X sec kein HLS-Write mehr -> restart
 CHECK_INTERVAL_SEC=1
 
-# HLS Verhalten (für Stabilität + spätere MP4-Konvertierung)
-HLS_TIME=1
-HLS_LIST_SIZE=8 # 2 ist viel zu knapp, 6-10 ist realistisch
-HLS_FLAGS="independent_segments+temp_file"
-# Optional später, wenn alles stabil ist:
-# HLS_FLAGS="delete_segments+independent_segments+temp_file"
+# HLS Verhalten
+HLS_TIME=6
+HLS_LIST_SIZE=20
+HLS_FLAGS="delete_segments+append_list+independent_segments+program_date_time+omit_endlist+temp_file"
+# Für MP4 später eher:
+# HLS_FLAGS="append_list+independent_segments+program_date_time+omit_endlist+temp_file"
 
 SESSION_FLAG="$HLS/.session_active"
-
 mkdir -p "$HLS"
 
 log() { echo "[ffmpeg-runner] $*"; }
@@ -40,7 +38,6 @@ has_any_hls_files() {
     -print -quit 2>/dev/null | grep -q .
 }
 
-# Neu: age pro stream-prefix (screen/presenter/questioner/organizer)
 latest_age_for_prefix() {
   local prefix="$1" now ts epoch
   now=$(date +%s)
@@ -67,67 +64,96 @@ kill_ffmpeg() {
   wait "$pid" 2>/dev/null || true
 }
 
+# Wird pro Lauf gesetzt (nur Prefixes, die FFmpeg auch wirklich startet)
+PREFIXES_TO_CHECK=()
+
 start_ffmpeg() {
   log "starting ffmpeg..."
 
-  ffmpeg -hide_banner -loglevel info -stats \
-    -protocol_whitelist file,udp,rtp \
-    -reorder_queue_size 1024 \
-    -rtbufsize 500M \
-    -max_delay 30000000 \
-    -fflags +genpts+discardcorrupt \
-    -analyzeduration 1M -probesize 1M \
-    -i "$SDP" \
-    \
-    -map 0:v:0? -map 0:a:0? \
-    -vsync 0 \
-    -vf "scale=w=1920:h=1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" \
-    -c:v libx264 -preset fast -pix_fmt yuv420p \
-    -b:v 12000k -maxrate 16000k -bufsize 48000k \
-    -g 30 -keyint_min 30 -sc_threshold 40 -bf 2 \
-    -force_key_frames "expr:gte(t,n_forced*2)" \
-    -c:a aac -b:a 96k -ar 48000 \
-    -f hls -hls_time "$HLS_TIME" -hls_list_size "$HLS_LIST_SIZE" \
-    -hls_flags "$HLS_FLAGS" -hls_start_number_source epoch \
-    -hls_segment_filename "$HLS/screen_%05d.ts" "$HLS/screen.m3u8" \
-    \
-    -map 0:v:1? -map 0:a:1? \
-    -vsync 0 \
-    -vf "scale=w=1280:h=720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2" \
-    -c:v libx264 -preset fast -pix_fmt yuv420p \
-    -b:v 4000k -maxrate 5000k -bufsize 15000k \
-    -g 60 -keyint_min 60 -sc_threshold 40 -bf 2 \
-    -force_key_frames "expr:gte(t,n_forced*1)" \
-    -c:a aac -b:a 96k -ar 48000 \
-    -f hls -hls_time "$HLS_TIME" -hls_list_size "$HLS_LIST_SIZE" \
-    -hls_flags "$HLS_FLAGS" -hls_start_number_source epoch \
-    -hls_segment_filename "$HLS/presenter_%05d.ts" "$HLS/presenter.m3u8" \
-    \
-    -map 0:v:2? -map 0:a:2? \
-    -vsync 0 \
-    -vf "scale=w=1280:h=720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2" \
-    -c:v libx264 -preset fast -pix_fmt yuv420p \
-    -b:v 4000k -maxrate 5000k -bufsize 15000k \
-    -g 60 -keyint_min 60 -sc_threshold 40 -bf 2 \
-    -force_key_frames "expr:gte(t,n_forced*1)" \
-    -c:a aac -b:a 96k -ar 48000 \
-    -f hls -hls_time "$HLS_TIME" -hls_list_size "$HLS_LIST_SIZE" \
-    -hls_flags "$HLS_FLAGS" -hls_start_number_source epoch \
-    -hls_segment_filename "$HLS/questioner_%05d.ts" "$HLS/questioner.m3u8" \
-    \
-    -map 0:v:3? -map 0:a:3? \
-    -vsync 0 \
-    -vf "scale=w=1280:h=720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2" \
-    -c:v libx264 -preset fast -pix_fmt yuv420p \
-    -b:v 4000k -maxrate 5000k -bufsize 15000k \
-    -g 60 -keyint_min 60 -sc_threshold 40 -bf 2 \
-    -force_key_frames "expr:gte(t,n_forced*1)" \
-    -c:a aac -b:a 96k -ar 48000 \
-    -f hls -hls_time "$HLS_TIME" -hls_list_size "$HLS_LIST_SIZE" \
-    -hls_flags "$HLS_FLAGS" -hls_start_number_source epoch \
-    -hls_segment_filename "$HLS/organizer_%05d.ts" "$HLS/organizer.m3u8" \
-    &
+  # Stabilität/CPU: 30fps, feste GOP passend zu HLS_TIME
+  local FPS=30
+  local GOP=$((FPS * HLS_TIME))   # 6s * 30fps = 180
 
+  # Wie viele Video-Medias stehen im SDP?
+  # (Zählt die m=video Sektionen, das matcht i.d.R. mit 0:v:0..n)
+  local VIDEO_COUNT
+  VIDEO_COUNT=$(grep -c '^m=video' "$SDP" 2>/dev/null || echo 0)
+
+  PREFIXES_TO_CHECK=()
+
+  # Bauen wir den Befehl als Array -> kein Backslash-Horror
+  local -a cmd
+  cmd=(
+    ffmpeg
+    -hide_banner -loglevel info -stats
+    -protocol_whitelist file,udp,rtp
+
+    # RTP/UDP Robustheit
+    -reorder_queue_size 1024
+    -rtbufsize 500M
+    -max_delay 3000000
+
+    # weniger Müll / bessere Zeitstempel
+    -fflags +genpts+discardcorrupt
+    -analyzeduration 1M -probesize 1M
+
+    -i "$SDP"
+  )
+
+  add_variant() {
+    local prefix="$1" v_idx="$2" a_idx="$3"
+    local w="$4" h="$5"
+    local vb="$6" vmax="$7" vbuf="$8"
+
+    PREFIXES_TO_CHECK+=("$prefix")
+
+    cmd+=(
+      -map "0:v:${v_idx}?" -map "0:a:${a_idx}?"
+      -fps_mode cfr -r "$FPS"
+      -vf "scale=w=${w}:h=${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2"
+
+      -c:v libx264 -preset veryfast -pix_fmt yuv420p
+      -b:v "$vb" -maxrate "$vmax" -bufsize "$vbuf"
+
+      # saubere Segment-Keyframes:
+      -g "$GOP" -keyint_min "$GOP" -sc_threshold 0 -bf 0
+      -force_key_frames "expr:gte(t,n_forced*${HLS_TIME})"
+
+      # Audio pro Stream (optional gemappt, wenn nicht vorhanden -> video-only ok)
+      -c:a aac -b:a 96k -ar 48000 -ac 2
+
+      -f hls
+      -hls_time "$HLS_TIME"
+      -hls_list_size "$HLS_LIST_SIZE"
+      -hls_flags "$HLS_FLAGS"
+      -hls_start_number_source epoch
+      -hls_segment_filename "$HLS/${prefix}_%05d.ts"
+      "$HLS/${prefix}.m3u8"
+    )
+  }
+
+  # Nur Outputs hinzufügen, wenn das SDP den Video-Stream dafür hat
+  # Index 0..3 => screen/presenter/questioner/organizer
+  if [ "$VIDEO_COUNT" -ge 1 ]; then
+    # Screen 1080p (stabiler Bereich, nicht absurd hoch)
+    add_variant "screen" 0 0 1920 1080 6000k 8000k 24000k
+  fi
+  if [ "$VIDEO_COUNT" -ge 2 ]; then
+    add_variant "presenter" 1 1 1280 720 3000k 4500k 13500k
+  fi
+  if [ "$VIDEO_COUNT" -ge 3 ]; then
+    add_variant "questioner" 2 2 1280 720 3000k 4500k 13500k
+  fi
+  if [ "$VIDEO_COUNT" -ge 4 ]; then
+    add_variant "organizer" 3 3 1280 720 3000k 4500k 13500k
+  fi
+
+  if [ "${#PREFIXES_TO_CHECK[@]}" -eq 0 ]; then
+    log "no video streams in SDP -> not starting ffmpeg"
+    return 1
+  fi
+
+  "${cmd[@]}" &
   echo $!
 }
 
@@ -139,12 +165,11 @@ while true; do
     sleep 0.5
   done
 
-  # NICHT mehr automatisch clearen (wichtig für Stabilität & spätere MP4-Konvertierung)
   touch "$SESSION_FLAG" 2>/dev/null || true
 
-  PID="$(start_ffmpeg)"
+  PID="$(start_ffmpeg)" || { sleep 1; continue; }
   STARTED_AT="$(date +%s)"
-  log "ffmpeg pid=$PID"
+  log "ffmpeg pid=$PID (outputs: ${PREFIXES_TO_CHECK[*]})"
 
   while kill -0 "$PID" 2>/dev/null; do
     if active_is_stale; then
@@ -173,8 +198,8 @@ while true; do
       continue
     fi
 
-    # ✅ Neu: Stall-Check pro Playlist/Prefix
-    for p in screen presenter questioner organizer; do
+    # Stall-Check nur für gestartete Prefixes
+    for p in "${PREFIXES_TO_CHECK[@]}"; do
       age="$(latest_age_for_prefix "$p")"
       if [ "$age" -gt "$STALL_AFTER_SEC" ]; then
         log "$p stalled (${age}s) -> restarting ffmpeg"
