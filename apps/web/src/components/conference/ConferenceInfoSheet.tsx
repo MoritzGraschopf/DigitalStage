@@ -45,7 +45,7 @@ export function ConferenceInfoSheet({
                 </SheetHeader>
                 <div className="grid grid-cols-[min-content_1fr] items-center gap-2 px-4 mt-4">
                     <div className="font-medium">Titel:</div>
-                    <div className="text-right">{conference.title}</div>
+                    <div className="text-right font-bold">{conference.title}</div>
                     <Separator className="col-span-2" />
                     <div className="font-medium">Beschreibung:</div>
                     <div className="text-right">{conference.description}</div>
