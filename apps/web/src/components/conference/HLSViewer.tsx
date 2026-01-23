@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { User } from "@prisma/client";
-import { useWS } from "@/context/WebSocketContext";
-import { Badge } from "@/components/ui/badge";
-import { Crown } from "lucide-react";
+import {useEffect, useRef, useState} from "react";
+import {User} from "@prisma/client";
+import {useWS} from "@/context/WebSocketContext";
+import {Badge} from "@/components/ui/badge";
+import {Crown} from "lucide-react";
 import type HlsType from "hls.js";
 
 interface HLSViewerProps {
@@ -52,14 +52,13 @@ export function HLSViewer({
     const showOrganizerVideo = !isOrganizerPresenter && !!organizerId;
 
     useEffect(() => {
-        const off = ws.on("server:use-hls", (msg: unknown) => {
+        return ws.on("server:use-hls", (msg: unknown) => {
             const m = msg as { conferenceId?: string };
             if (m?.conferenceId === conferenceId) {
                 console.log("✅ HLS verfügbar für Konferenz", conferenceId);
                 setHasHls(true);
             }
         });
-        return off;
     }, [ws, conferenceId]);
 
     useEffect(() => {

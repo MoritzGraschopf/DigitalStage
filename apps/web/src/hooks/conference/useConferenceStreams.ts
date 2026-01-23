@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
-import { ConferenceWithParticipants, ExtendedRole, UserLite } from "@/lib/ConferenceTypes";
+import {useCallback, useEffect, useMemo, useRef} from "react";
+import {ConferenceWithParticipants, ExtendedRole, UserLite} from "@/lib/ConferenceTypes";
 
 export function useConferenceStreams(
     localStream: MediaStream | null,
@@ -60,16 +60,13 @@ export function useConferenceStreams(
             });
             
             if (cameraTracks.length > 0) {
-                const cameraStream = new MediaStream([...cameraTracks, ...audioTracks]);
-                participants[userId] = cameraStream;
+                participants[userId] = new MediaStream([...cameraTracks, ...audioTracks]);
             } else if (audioTracks.length > 0) {
-                const audioOnlyStream = new MediaStream([...audioTracks]);
-                participants[userId] = audioOnlyStream;
+                participants[userId] = new MediaStream([...audioTracks]);
             }
             
             if (screenTracks.length > 0) {
-                const screenStream = new MediaStream([...screenTracks]);
-                screens[userId] = screenStream;
+                screens[userId] = new MediaStream([...screenTracks]);
             }
         });
 

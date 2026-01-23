@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { User, UserConference } from "@prisma/client";
-import { useAuth } from "@/context/AuthContext";
-import { useWS } from "@/context/WebSocketContext";
-import { ConferenceWithParticipants, ExtendedRole, UserLite } from "@/lib/ConferenceTypes";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
+import {User, UserConference} from "@prisma/client";
+import {useAuth} from "@/context/AuthContext";
+import {useWS} from "@/context/WebSocketContext";
+import {ConferenceWithParticipants, ExtendedRole, UserLite} from "@/lib/ConferenceTypes";
 
 export function useConference(link: string) {
     const [disabled, setDisabled] = useState(false);
@@ -72,7 +72,7 @@ export function useConference(link: string) {
     }, [ws, conference?.id, fetchConference]);
 
     useEffect(() => {
-        const off = ws.on("server:presence-update", (msg: unknown) => {
+        return ws.on("server:presence-update", (msg: unknown) => {
             const m = msg as { conferenceId?: string; viewers?: string[]; participants?: string[] };
             if (!m?.conferenceId || m.conferenceId !== conference?.id) return;
 
@@ -81,7 +81,6 @@ export function useConference(link: string) {
                 participants: m.participants ?? [],
             });
         });
-        return off;
     }, [ws, conference?.id]);
 
     const neededUserIds = useMemo(() => {
