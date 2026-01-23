@@ -620,6 +620,9 @@ export function useWebRTC(params: {
                 }
             });
 
+            console.log("screen settings", track.getSettings());
+
+
             const track = stream.getVideoTracks()[0];
             if (!track) {
                 console.warn("startScreenShare: kein Video-Track");
@@ -638,11 +641,13 @@ export function useWebRTC(params: {
             const producer = await sendTransport.produce({
                 track,
                 encodings: [{
-                    maxBitrate: 12_000_000,
+                    maxBitrate: 15_000_000,
                     maxFramerate: 15
                 }],
                 codecOptions: {
-                    videoGoogleStartBitrate: 8000
+                    videoGoogleStartBitrate: 8000,
+                    videoGoogleMaxBitrate: 15000,
+                    videoGoogleMinBitrate: 4000,
                 },
                 appData: { mediaTag: "screen", source: "screen" },
             });
@@ -881,7 +886,7 @@ export function useWebRTC(params: {
 
             request<null>("sfu:leave").catch(() => {});
         };
-    }, [userId, conferenceId, role, consume, request, processPendingNewProducers, iceServers, reconnectCount, startHlsDummies]);
+    }, [userId, conferenceId, role, consume, request, processPendingNewProducers, iceServers, reconnectCount, startHlsDummies, presenterUserId]);
 
     // Lokalen Mikrofon-Status tracken
     useEffect(() => {
