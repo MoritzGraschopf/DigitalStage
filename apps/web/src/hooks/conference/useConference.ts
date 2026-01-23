@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { User } from "@prisma/client";
+import { User, UserConference } from "@prisma/client";
 import { useAuth } from "@/context/AuthContext";
 import { useWS } from "@/context/WebSocketContext";
 import { ConferenceWithParticipants, ExtendedRole, UserLite } from "@/lib/ConferenceTypes";
@@ -127,7 +127,7 @@ export function useConference(link: string) {
     const derivedRole: ExtendedRole = useMemo(() => {
         if (!conference || !user?.id) return "VIEWER";
         if (conference.organizerId === user.id) return "ORGANIZER";
-        const uc = conference.participants.find((p: any) => p.userId === user.id);
+        const uc = conference.participants.find((p: UserConference & { isPresenter?: boolean }) => p.userId === user.id);
         if (!uc) return "VIEWER";
         return uc.role as ExtendedRole;
     }, [conference, user?.id]);
