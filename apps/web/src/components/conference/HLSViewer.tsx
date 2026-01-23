@@ -109,9 +109,16 @@ export function HLSViewer({
                 };
 
                 if (HlsClass && HlsClass.isSupported()) {
-                    const hls = new HlsClass({ 
-                        enableWorker: false,
-                        lowLatencyMode: true,
+                    const hls = new HlsClass({
+                        lowLatencyMode: false,
+
+                        liveSyncDuration: 30,
+                        liveMaxLatencyDuration: 45,
+
+                        maxBufferLength: 60,
+                        backBufferLength: 0,
+
+                        enableWorker: true
                     });
                     if (streamKey) {
                         hlsInstancesRef.set(streamKey, hls);
