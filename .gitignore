@@ -45,6 +45,7 @@ next-env.d.ts
 
 /src/generated/prisma
 .cursor
+.vscode
 
 # hell yeah
 /apps/websocket/node_modules/
