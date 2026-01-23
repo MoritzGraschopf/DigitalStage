@@ -620,15 +620,14 @@ export function useWebRTC(params: {
                 }
             });
 
-            console.log("screen settings", track.getSettings());
-
-
             const track = stream.getVideoTracks()[0];
             if (!track) {
                 console.warn("startScreenShare: kein Video-Track");
                 stream.getTracks().forEach(t => t.stop());
                 return;
             }
+
+            console.log("screen settings", track.getSettings());
 
             track.contentHint = "detail";
             screenStreamRef.current = stream;
