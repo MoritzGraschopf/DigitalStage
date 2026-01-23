@@ -1,0 +1,145 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { ConferenceWithParticipants, ExtendedRole, UserLite } from "@/lib/ConferenceTypes";
+
+export function useConferenceStreams(
+    localStream: MediaStream | null,
+    remoteStreams: Record<string, MediaStream>,
+    isScreenSharing: boolean,
+    localScreenStream: MediaStream | null,
+    audioMuteStatus: Record<string, boolean>,
+    user: { id: string; firstName: string; lastName?: string | null } | null,
+    conference: ConferenceWithParticipants | null,
+    userById: Record<string, UserLite>,
+    derivedRole: ExtendedRole,
+    isCurrentUserPresenter: boolean
+) {
+    const prevIsPresenterRef = useRef(isCurrentUserPresenter);
+    const prevScreenSharingRef = useRef(isScreenSharing);
+
+    useEffect(() => {
+        if (prevIsPresenterRef.current && !isCurrentUserPresenter && isScreenSharing) {
+            console.log("User ist nicht mehr Präsentator -> Screenshare stoppen");
+        }
+        prevIsPresenterRef.current = isCurrentUserPresenter;
+    }, [isCurrentUserPresenter, isScreenSharing]);
+
+    useEffect(() => {
+        if (prevScreenSharingRef.current && !isScreenSharing) {
+            console.log("Screenshare beendet -> prüfe ob Update nötig");
+            const timer = setTimeout(() => {}, 100);
+            return () => clearTimeout(timer);
+        }
+        prevScreenSharingRef.current = isScreenSharing;
+    }, [isScreenSharing]);
+
+    const getUserName = useCallback((peerId: string): string => {
+        const u = userById[peerId];
+        return u ? `${u.firstName}${u.lastName ? ` ${u.lastName}` : ""}` : peerId;
+    }, [userById]);
+
+    const { participantStreams, screenShareStreams } = useMemo(() => {
+        const participants: Record<string, MediaStream> = {};
+        const screens: Record<string, MediaStream> = {};
+
+        Object.entries(remoteStreams).forEach(([userId, stream]) => {
+            const videoTracks = stream.getVideoTracks();
+            const audioTracks = stream.getAudioTracks();
+            
+            const cameraTracks: MediaStreamTrack[] = [];
+            const screenTracks: MediaStreamTrack[] = [];
+            
+            videoTracks.forEach(track => {
+                const label = track.label.toLowerCase();
+                if (label.includes('screen') || label.includes('display') || label.includes('window') || label.includes('monitor')) {
+                    screenTracks.push(track);
+                } else {
+                    cameraTracks.push(track);
+                }
+            });
+            
+            if (cameraTracks.length > 0) {
+                const cameraStream = new MediaStream([...cameraTracks, ...audioTracks]);
+                participants[userId] = cameraStream;
+            } else if (audioTracks.length > 0) {
+                const audioOnlyStream = new MediaStream([...audioTracks]);
+                participants[userId] = audioOnlyStream;
+            }
+            
+            if (screenTracks.length > 0) {
+                const screenStream = new MediaStream([...screenTracks]);
+                screens[userId] = screenStream;
+            }
+        });
+
+        return { participantStreams: participants, screenShareStreams: screens };
+    }, [remoteStreams]);
+
+    const activeScreenShare = useMemo(() => {
+        if (isScreenSharing && localScreenStream) {
+            return { userId: user?.id ?? "", stream: localScreenStream, userName: "Du" };
+        }
+        const entries = Object.entries(screenShareStreams);
+        if (entries.length > 0) {
+            const [userId, stream] = entries[0];
+            return { userId, stream, userName: getUserName(userId) };
+        }
+        return null;
+    }, [screenShareStreams, getUserName, isScreenSharing, localScreenStream, user?.id]);
+
+    const webrtcParticipants = useMemo(() => {
+        const participants: Array<{
+            userId: string;
+            name: string;
+            role: ExtendedRole;
+            isPresenter: boolean;
+            isQuestioner: boolean;
+            isMuted: boolean;
+            isLocal: boolean;
+        }> = [];
+
+        if (localStream && user) {
+            const uc = conference?.participants.find(p => p.userId === user.id);
+            const role = uc?.role as ExtendedRole | undefined;
+            const isPresenter = uc?.isPresenter ?? false;
+            participants.push({
+                userId: user.id,
+                name: `${user.firstName}${user.lastName ? ` ${user.lastName}` : ""}`,
+                role: derivedRole,
+                isPresenter,
+                isQuestioner: !isPresenter && role === "QUESTIONER",
+                isMuted: audioMuteStatus[user.id] ?? true,
+                isLocal: true,
+            });
+        }
+
+        Object.keys(participantStreams).forEach(userId => {
+            const uc = conference?.participants.find(p => p.userId === userId);
+            const role = uc?.role as ExtendedRole | undefined;
+            const user = userById[userId];
+            if (user) {
+                const isPresenter = uc?.isPresenter ?? false;
+                participants.push({
+                    userId,
+                    name: `${user.firstName}${user.lastName ? ` ${user.lastName}` : ""}`,
+                    role: role ?? "PARTICIPANT",
+                    isPresenter,
+                    isQuestioner: !isPresenter && role === "QUESTIONER",
+                    isMuted: audioMuteStatus[userId] ?? true,
+                    isLocal: false,
+                });
+            }
+        });
+
+        return participants;
+    }, [localStream, user, conference, userById, derivedRole, participantStreams, audioMuteStatus]);
+
+    return {
+        participantStreams,
+        screenShareStreams,
+        activeScreenShare,
+        webrtcParticipants,
+        getUserName,
+    };
+}
