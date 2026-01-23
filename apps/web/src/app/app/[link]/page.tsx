@@ -470,7 +470,6 @@ function HLSViewer({
 
         loadHls();
 
-        // Cleanup: Zerstöre alle HLS-Instanzen beim Unmount oder Dependency-Change
         return () => {
             hlsInstancesRef.forEach(h => {
                 try { h.destroy(); } catch {}

@@ -74,7 +74,7 @@ start_ffmpeg() {
     -protocol_whitelist file,udp,rtp \
     -reorder_queue_size 1024 \
     -rtbufsize 500M \
-    -max_delay 2000000 \
+    -max_delay 30000000 \
     -fflags +genpts+discardcorrupt \
     -analyzeduration 1M -probesize 1M \
     -i "$SDP" \
