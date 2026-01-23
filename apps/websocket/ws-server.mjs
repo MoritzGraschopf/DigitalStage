@@ -794,7 +794,7 @@ async function createWebRtcTransport(router) {
         enableUdp: true,
         enableTcp: true,
         preferUdp: true,
-        initialAvailableOutgoingBitrate: 1_000_000,
+        initialAvailableOutgoingBitrate: 15_000_000,
     });
 
     return transport;
