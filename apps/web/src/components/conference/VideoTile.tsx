@@ -9,6 +9,7 @@ export type VideoTileProps = {
     className?: string;
     mirror?: boolean;
     isLocal?: boolean;
+    noBorder?: boolean;
 };
 
 export function VideoTile({
@@ -18,6 +19,7 @@ export function VideoTile({
     className = "",
     mirror = false,
     isLocal = false,
+    noBorder = false,
 }: VideoTileProps) {
     const ref = useRef<HTMLVideoElement | null>(null);
     const [muted, setMuted] = useState<boolean>(mutedByDefault);
@@ -184,7 +186,7 @@ export function VideoTile({
     const hasAudio = !!stream?.getAudioTracks().some((t) => t.readyState !== "ended");
 
     return (
-        <div className={`relative rounded-xl overflow-hidden bg-gradient-to-br from-background to-muted/30 border shadow-lg hover:shadow-xl transition-all duration-300 group ${className}`}>
+        <div className={`relative rounded-xl overflow-hidden bg-gradient-to-br from-background to-muted/30 ${noBorder ? '' : 'border shadow-lg hover:shadow-xl'} transition-all duration-300 group ${className}`}>
             <div className="relative aspect-video bg-gradient-to-br from-muted/20 to-muted/10">
                 <video
                     ref={ref}

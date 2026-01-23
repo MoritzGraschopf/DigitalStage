@@ -64,7 +64,7 @@ export function ConferenceVideoLayout({
                             </div>
                         ) : (
                             <div className="h-full flex gap-2 sm:gap-3 overflow-x-auto pb-2">
-                                {hasLocal && (
+                                {hasLocal && !isScreenSharing && (
                                     <div className="flex-shrink-0 w-48 sm:w-56 md:w-64">
                                         <VideoTile
                                             stream={localStream}
@@ -83,6 +83,11 @@ export function ConferenceVideoLayout({
                                     let title = getUserName(peerId);
                                     if (isPeerPresenter) title += " (Präsentator)";
                                     if (isPeerQuestioner) title += " (Fragesteller)";
+                                    // If this person is sharing their screen, show their camera feed
+                                    const isSharingScreen = activeScreenShare && activeScreenShare.userId === peerId;
+                                    if (isSharingScreen) {
+                                        title += " (Kamera)";
+                                    }
                                     return (
                                         <div key={peerId} className="flex-shrink-0 w-48 sm:w-56 md:w-64">
                                             <VideoTile
@@ -175,7 +180,7 @@ export function ConferenceVideoLayout({
                                     )}
                                 </div>
                             ) : totalParticipants <= 4 ? (
-                                <div className="h-full grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                                <div className={`h-full grid grid-cols-1 sm:grid-cols-2 ${totalParticipants === 2 ? 'gap-0' : 'gap-3 sm:gap-4'}`}>
                                     {hasLocal && (
                                         <VideoTile
                                             stream={localStream}
@@ -183,6 +188,7 @@ export function ConferenceVideoLayout({
                                             mutedByDefault={true}
                                             mirror={true}
                                             isLocal={true}
+                                            noBorder={totalParticipants === 2}
                                             className="w-full h-full object-cover"
                                         />
                                     )}
@@ -201,6 +207,7 @@ export function ConferenceVideoLayout({
                                                 mirror={false}
                                                 mutedByDefault={false}
                                                 isLocal={false}
+                                                noBorder={totalParticipants === 2}
                                                 className="w-full h-full object-cover"
                                             />
                                         );

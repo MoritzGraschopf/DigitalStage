@@ -139,28 +139,9 @@ export default function ConferenceChat({conference, disabled}: { conference: Con
     }
 
     return (
-        <div className="h-full flex flex-col-reverse gap-2">
-            <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-[1fr_min-content] m-2 gap-2">
-                    <FormField
-                        control={form.control}
-                        name="message"
-                        render={({field}) => (
-                            <FormItem>
-                                <FormControl>
-                                    <Input type="text" {...field} autoComplete="off" />
-                                </FormControl>
-                            </FormItem>
-                        )}
-                    />
-                    <Button size="icon" type="submit" disabled={disabled}>
-                        <SendHorizonal />
-                    </Button>
-                </form>
-            </Form>
-
+        <div className="h-full flex flex-col gap-2 min-h-0">
             {/* Wichtig: viewportClassName="relative" für den Floating-Button */}
-            <div className="relative h-full">
+            <div className="relative flex-1 min-h-0">
                 <ScrollArea
                     className="h-full"
                     viewportRef={viewportRef}
@@ -199,6 +180,24 @@ export default function ConferenceChat({conference, disabled}: { conference: Con
                     </div>
                 )}
             </div>
+            <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-[1fr_min-content] m-2 gap-2 flex-shrink-0">
+                    <FormField
+                        control={form.control}
+                        name="message"
+                        render={({field}) => (
+                            <FormItem>
+                                <FormControl>
+                                    <Input type="text" {...field} autoComplete="off" />
+                                </FormControl>
+                            </FormItem>
+                        )}
+                    />
+                    <Button size="icon" type="submit" disabled={disabled}>
+                        <SendHorizonal />
+                    </Button>
+                </form>
+            </Form>
         </div>
     )
 }
