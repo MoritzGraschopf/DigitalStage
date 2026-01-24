@@ -53,3 +53,5 @@ next-env.d.ts
 /apps/web/node_modules/
 
 /hls
+
+temp.docker-compose.yaml
