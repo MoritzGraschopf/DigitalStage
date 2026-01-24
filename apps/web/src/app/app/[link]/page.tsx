@@ -241,7 +241,7 @@ export default function Page({ params }: { params: Promise<{ link: string }> }) 
             </div>
 
             {/* Chat - auf mobil als Sheet, auf Desktop als Sidebar */}
-            <div className="lg:block m-2 lg:mr-2 lg:my-2 border rounded-xl overflow-hidden bg-gradient-to-br from-background via-background to-muted/5 shadow-inner flex flex-col min-h-0">
+            <div className="hidden m-2 lg:mr-2 lg:my-2 border rounded-xl overflow-hidden bg-gradient-to-br from-background via-background to-muted/5 shadow-inner lg:flex flex-col min-h-0">
                 <ConferenceChat conference={conference} disabled={disabled} />
             </div>
 
