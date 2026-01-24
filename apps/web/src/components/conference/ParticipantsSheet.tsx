@@ -80,7 +80,7 @@ export function ParticipantsSheet({
             <SheetTrigger asChild>
                 {trigger || defaultTrigger}
             </SheetTrigger>
-            <SheetContent side="right" className="w-full sm:w-96 overflow-y-auto">
+            <SheetContent side="right" className="w-full sm:w-96 overflow-y-auto px-4 pb-4">
                 <SheetHeader className="mb-8">
                     <SheetTitle>Teilnehmerübersicht</SheetTitle>
                     <SheetDescription className="mt-2 mb-6">
