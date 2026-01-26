@@ -89,7 +89,7 @@ start_ffmpeg() {
       ffmpeg
       -hide_banner -loglevel info -stats
       -protocol_whitelist file,udp,rtp
-      -timeout 5000000
+      -rw_timeout 5000000
 
       -fflags +nobuffer+discardcorrupt+genpts
       -flags +low_delay
@@ -220,14 +220,14 @@ while true; do
       continue
     fi
 
-    for p in "${PREFIXES_TO_CHECK[@]}"; do
-      age="$(latest_age_for_prefix "$p")"
-      if [ "$age" -gt "$STALL_AFTER_SEC" ]; then
-        log "$p stalled (${age}s) -> restarting ffmpeg"
-        kill_ffmpeg "$PID"
-        break 2
-      fi
-    done
+    #for p in "${PREFIXES_TO_CHECK[@]}"; do
+    #  age="$(latest_age_for_prefix "$p")"
+    #  if [ "$age" -gt "$STALL_AFTER_SEC" ]; then
+    #    log "$p stalled (${age}s) -> restarting ffmpeg"
+    #    kill_ffmpeg "$PID"
+    #    break 2
+    #  fi
+    #done
 
     sleep "$CHECK_INTERVAL_SEC"
   done

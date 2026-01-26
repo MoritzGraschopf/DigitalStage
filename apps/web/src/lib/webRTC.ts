@@ -228,7 +228,8 @@ export function useWebRTC(params: {
     // ----- HLS Dummy-Producer Funktionen
     const startHlsDummies = useCallback(async (sendTransport: Transport) => {
         // Nur Organizer
-        if (role !== "ORGANIZER") return;
+        if (role !== "ORGANIZER")
+            return;
         if (hlsDummyRef.current) return;
 
         const screen = makeCanvasTrack(1920, 1080, 5, "Warte auf Bildschirmfreigabe");
@@ -237,27 +238,28 @@ export function useWebRTC(params: {
 
         const prods: Producer[] = [];
 
-        const produceSlot = async (
-            slot: "screen" | "presenter" | "questioner" | "organizer",
-            v: MediaStreamTrack,
-            a: MediaStreamTrack
-        ) => {
+        const produceSlot = async (slot: string, v: MediaStreamTrack, a: MediaStreamTrack) => {
+            // WICHTIG: Warte kurz zwischen den Slots, damit der Server sie nacheinander ins SDP schreibt
+            await new Promise(r => setTimeout(r, 200));
+
             prods.push(await sendTransport.produce({
                 track: v,
-                encodings: [{ maxBitrate: 80_000, maxFramerate: 5 }],
-                appData: { hlsOnly: true, hlsSlot: slot, source: "dummy" },
+                encodings: [{ maxBitrate: 100_000, maxFramerate: 5 }], // Geringe Last für Dummies
+                appData: { hlsOnly: true, hlsSlot: slot }
             }));
+
+            await new Promise(r => setTimeout(r, 100));
+
             prods.push(await sendTransport.produce({
                 track: a,
-                appData: { hlsOnly: true, hlsSlot: slot, source: "dummy" },
+                appData: { hlsOnly: true, hlsSlot: slot }
             }));
         };
 
-        // Mehrere Producer brauchen eigene Tracks → clone()
-        await produceSlot("screen", screen.track, audio.track.clone());
-        await produceSlot("presenter", tile.track.clone(), audio.track.clone());
-        await produceSlot("questioner", tile.track.clone(), audio.track.clone());
-        await produceSlot("organizer", tile.track.clone(), audio.track.clone());
+        await produceSlot("screen", screen.track, audio.track.clone());      // Index 0
+        await produceSlot("presenter", tile.track.clone(), audio.track.clone());  // Index 1
+        await produceSlot("questioner", tile.track.clone(), audio.track.clone()); // Index 2
+        await produceSlot("organizer", tile.track.clone(), audio.track.clone());  // Index 3
 
         hlsDummyRef.current = {
             stop: () => {
