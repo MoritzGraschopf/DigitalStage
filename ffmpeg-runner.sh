@@ -5,18 +5,16 @@ SDP="/opt/digitalstage/sdp/input.sdp"
 HLS="/opt/digitalstage/hls"
 ACTIVE="/opt/digitalstage/sdp/active"
 
-ACTIVE_STALE_SEC=10          # wenn active älter als X sec -> conference gilt als tot
-FIRST_OUTPUT_DEADLINE=60     # wenn nach X sec gar nichts im HLS-Ordner landet -> restart
-WARMUP_SEC=25                # in den ersten X sec kein Stall-Check (Startup/Keyframes)
-STALL_AFTER_SEC=15           # wenn nach Warmup X sec kein HLS-Write mehr -> restart
+ACTIVE_STALE_SEC=10
+FIRST_OUTPUT_DEADLINE=60
+WARMUP_SEC=25
+STALL_AFTER_SEC=15
 CHECK_INTERVAL_SEC=1
 
-# HLS Verhalten
+# HLS
 HLS_TIME=6
 HLS_LIST_SIZE=20
 HLS_FLAGS="delete_segments+append_list+independent_segments+program_date_time+omit_endlist+temp_file"
-# Für MP4 später eher:
-# HLS_FLAGS="append_list+independent_segments+program_date_time+omit_endlist+temp_file"
 
 SESSION_FLAG="$HLS/.session_active"
 mkdir -p "$HLS"
@@ -24,7 +22,6 @@ mkdir -p "$HLS"
 log() { echo "[ffmpeg-runner] $*"; }
 
 mtime() {
-  # Linux: stat -c %Y, macOS/BSD: stat -f %m
   stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0
 }
 
@@ -69,37 +66,41 @@ kill_ffmpeg() {
   wait "$pid" 2>/dev/null || true
 }
 
-# Wird pro Lauf gesetzt (nur Prefixes, die FFmpeg auch wirklich startet)
 PREFIXES_TO_CHECK=()
 
 start_ffmpeg() {
   log "starting ffmpeg..."
 
-  # Stabilität/CPU: 30fps, feste GOP passend zu HLS_TIME
+  # === CPU / Quality knobs ===
+  # Wenn Screenshare-Start oft ruckelt: SCREEN_FPS=15 ist der schnellste Fix.
   local FPS=30
-  local GOP=$((FPS * HLS_TIME))   # 6s * 30fps = 180
+  local SCREEN_FPS=15   # <- 15 = viel stabiler bei 4 Cores. Wenn du unbedingt 30 willst: auf 30 setzen.
 
-  # Wie viele Video-Medias stehen im SDP?
-  # (Zählt die m=video Sektionen, das matcht i.d.R. mit 0:v:0..n)
+  local GOP=$((FPS * HLS_TIME))          # für 720p outputs
+  local SCREEN_GOP=$((SCREEN_FPS * HLS_TIME))
+
   local VIDEO_COUNT
   VIDEO_COUNT=$(grep -c '^m=video' "$SDP" 2>/dev/null || echo 0)
 
   PREFIXES_TO_CHECK=()
 
-  # Bauen wir den Befehl als Array -> kein Backslash-Horror
   local -a cmd
   cmd=(
     ffmpeg
     -hide_banner -loglevel info -stats
+
     -protocol_whitelist file,udp,rtp
 
-    # RTP/UDP Robustheit
+    # Input-Puffer/Queue: hilft bei CPU-Spikes (Screenshare-Start)
+    -thread_queue_size 8192
     -reorder_queue_size 1024
     -rtbufsize 500M
-    -max_delay 3000000
 
-    # weniger Müll / bessere Zeitstempel
-    -fflags +genpts+discardcorrupt
+    # Ihr wollt Delay -> gebt FFmpeg Delay
+    -max_delay 30000000
+
+    # RTP robust / weniger Stau
+    -fflags +genpts+discardcorrupt+nobuffer
     -analyzeduration 1M -probesize 1M
 
     -i "$SDP"
@@ -108,25 +109,32 @@ start_ffmpeg() {
   add_variant() {
     local prefix="$1" v_idx="$2" a_idx="$3"
     local w="$4" h="$5"
-    local vb="$6" vmax="$7" vbuf="$8"
+    local out_fps="$6" out_gop="$7"
+    local vb="$8" vmax="$9" vbuf="${10}"
+    local vthreads="${11}"
 
     PREFIXES_TO_CHECK+=("$prefix")
 
     cmd+=(
       -map "0:v:${v_idx}?" -map "0:a:${a_idx}?"
-      -fps_mode cfr -r "$FPS"
+
+      # CFR -> stabilere HLS-Segmente
+      -fps_mode cfr -r "$out_fps"
       -vf "scale=w=${w}:h=${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2"
 
+      # Video encode
       -c:v libx264 -preset veryfast -pix_fmt yuv420p
+      -threads "$vthreads"
       -b:v "$vb" -maxrate "$vmax" -bufsize "$vbuf"
 
-      # saubere Segment-Keyframes:
-      -g "$GOP" -keyint_min "$GOP" -sc_threshold 0 -bf 0
+      # Segment-Keyframes exakt
+      -g "$out_gop" -keyint_min "$out_gop" -sc_threshold 0 -bf 0
       -force_key_frames "expr:gte(t,n_forced*${HLS_TIME})"
 
-      # Audio pro Stream (optional gemappt, wenn nicht vorhanden -> video-only ok)
+      # Audio: pro Stream, stabil und günstig
       -c:a aac -b:a 96k -ar 48000 -ac 2
 
+      # HLS output
       -f hls
       -hls_time "$HLS_TIME"
       -hls_list_size "$HLS_LIST_SIZE"
@@ -137,20 +145,19 @@ start_ffmpeg() {
     )
   }
 
-  # Nur Outputs hinzufügen, wenn das SDP den Video-Stream dafür hat
-  # Index 0..3 => screen/presenter/questioner/organizer
+  # Output nur wenn Stream im SDP existiert
   if [ "$VIDEO_COUNT" -ge 1 ]; then
-    # Screen 1080p (stabiler Bereich, nicht absurd hoch)
-    add_variant "screen" 0 0 1920 1080 6000k 8000k 24000k
+    # Screen (heißester Pfad) -> FPS runter + 2 Threads
+    add_variant "screen"     0 0 1920 1080 "$SCREEN_FPS" "$SCREEN_GOP" 6000k 8000k 24000k 2
   fi
   if [ "$VIDEO_COUNT" -ge 2 ]; then
-    add_variant "presenter" 1 1 1280 720 3000k 4500k 13500k
+    add_variant "presenter"  1 1 1280 720  "$FPS"        "$GOP"        3000k 4500k 13500k 1
   fi
   if [ "$VIDEO_COUNT" -ge 3 ]; then
-    add_variant "questioner" 2 2 1280 720 3000k 4500k 13500k
+    add_variant "questioner" 2 2 1280 720  "$FPS"        "$GOP"        3000k 4500k 13500k 1
   fi
   if [ "$VIDEO_COUNT" -ge 4 ]; then
-    add_variant "organizer" 3 3 1280 720 3000k 4500k 13500k
+    add_variant "organizer"  3 3 1280 720  "$FPS"        "$GOP"        3000k 4500k 13500k 1
   fi
 
   if [ "${#PREFIXES_TO_CHECK[@]}" -eq 0 ]; then
@@ -163,7 +170,6 @@ start_ffmpeg() {
 }
 
 while true; do
-  # Nur starten wenn conference aktiv + SDP vorhanden
   until [ -s "$SDP" ] && [ -f "$ACTIVE" ] && ! active_is_stale; do
     log "waiting for active conference + sdp..."
     rm -f "$SESSION_FLAG" 2>/dev/null || true
@@ -194,7 +200,6 @@ while true; do
 
     uptime=$(( $(date +%s) - STARTED_AT ))
 
-    # Noch kein Output?
     if ! has_any_hls_files; then
       if [ "$uptime" -gt "$FIRST_OUTPUT_DEADLINE" ]; then
         log "no HLS output after ${FIRST_OUTPUT_DEADLINE}s -> restarting ffmpeg"
@@ -205,13 +210,11 @@ while true; do
       continue
     fi
 
-    # Warmup: keine Stall-Checks
     if [ "$uptime" -lt "$WARMUP_SEC" ]; then
       sleep "$CHECK_INTERVAL_SEC"
       continue
     fi
 
-    # Stall-Check nur für gestartete Prefixes
     for p in "${PREFIXES_TO_CHECK[@]}"; do
       age="$(latest_age_for_prefix "$p")"
       if [ "$age" -gt "$STALL_AFTER_SEC" ]; then
