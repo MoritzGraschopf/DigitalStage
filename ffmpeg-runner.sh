@@ -89,17 +89,20 @@ start_ffmpeg() {
       ffmpeg
       -hide_banner -loglevel info -stats
       -protocol_whitelist file,udp,rtp
+      -timeout 5000000
+
+      -fflags +nobuffer+discardcorrupt+genpts
+      -flags +low_delay
 
       # Add these lines to strengthen the RTP receiver
       -reorder_queue_size 4096
       -buffer_size 20M
-      -fifo_size 1000000
 
       -thread_queue_size 16384     # Increased from 8192
       -rtbufsize 1G                # Increased from 500M
 
       # Keep your existing max_delay
-      -max_delay 30000000
+      -max_delay 500000
       -fflags +genpts+discardcorrupt+nobuffer
       -analyzeduration 1M -probesize 1M
       -i "$SDP"
@@ -122,9 +125,12 @@ start_ffmpeg() {
       -vf "scale=w=${w}:h=${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2"
 
       # Video encode
-      -c:v libx264 -preset veryfast -pix_fmt yuv420p
+      -c:v libx264 -preset superfast -pix_fmt yuv420p
       -threads "$vthreads"
       -b:v "$vb" -maxrate "$vmax" -bufsize "$vbuf"
+
+      -max_interleave_delta 0
+      -avoid_negative_ts make_zero
 
       # Segment-Keyframes exakt
       -g "$out_gop" -keyint_min "$out_gop" -sc_threshold 0 -bf 0
@@ -229,3 +235,7 @@ while true; do
   log "loop restart in 1s..."
   sleep 1
 done
+
+
+
+
