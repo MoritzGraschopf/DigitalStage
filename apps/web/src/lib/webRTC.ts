@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import * as mediasoupClient from "mediasoup-client";
 
 type Role = "ORGANIZER" | "PARTICIPANT" | "VIEWER" | "QUESTIONER";
@@ -165,6 +165,7 @@ export function useWebRTC(params: {
     const hlsDummyRef = useRef<{ stop: () => void } | null>(null);
 
     const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+    // remoteStreams nutzt Keys: `${userId}:camera` und `${userId}:screen`
     const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
     const [audioMuteStatus, setAudioMuteStatus] = useState<Record<string, boolean>>({});
 
@@ -177,6 +178,7 @@ export function useWebRTC(params: {
     const [isScreenSharing, setIsScreenSharing] = useState(false);
     const [localScreenStream, setLocalScreenStream] = useState<MediaStream | null>(null);
     const pendingRef = useRef<Map<string, Pending<unknown>>>(new Map());
+    // interne Map hält die echten Streams getrennt
     const remoteStreamsRef = useRef<Map<string, MediaStream>>(new Map());
     const pendingNewProducersRef = useRef<
         Array<{ userId: string; producerId: string; kind?: string }>
@@ -272,6 +274,34 @@ export function useWebRTC(params: {
     // ----- consume helper
     const consumedRef = useRef<Map<string, string>>(new Map());
 
+    function classifyVideoTrack(track: MediaStreamTrack): "screen" | "camera" {
+        // 1) bessere Heuristik über Settings (bei Screen oft höher + niedrigere FPS)
+        try {
+            const s = track.getSettings?.() as MediaTrackSettings | undefined;
+            const w = typeof s?.width === "number" ? s.width : 0;
+            const h = typeof s?.height === "number" ? s.height : 0;
+            const fps = typeof s?.frameRate === "number" ? s.frameRate : 0;
+
+            if (w >= 1600 || h >= 900) return "screen";
+            if (fps > 0 && fps <= 20) return "screen";
+        } catch {
+            // ignore
+        }
+
+        // 2) fallback label
+        const label = (track.label || "").toLowerCase();
+        if (
+            label.includes("screen") ||
+            label.includes("display") ||
+            label.includes("window") ||
+            label.includes("monitor")
+        ) {
+            return "screen";
+        }
+
+        return "camera";
+    }
+
     const consume = useCallback(
         async (fromUserId: string, producerId: string) => {
             if(fromUserId === userIdRef.current){
@@ -316,56 +346,59 @@ export function useWebRTC(params: {
                 }
 
                 const applyTrack = () => {
-                    let managedStream = remoteStreamsRef.current.get(fromUserId);
-                    if (!managedStream) {
-                        managedStream = new MediaStream();
-                        remoteStreamsRef.current.set(fromUserId, managedStream);
+                    const camKey = `${fromUserId}:camera`;
+                    const screenKey = `${fromUserId}:screen`;
+
+                    // Streams pro Typ verwalten
+                    let camStream = remoteStreamsRef.current.get(camKey);
+                    if (!camStream) {
+                        camStream = new MediaStream();
+                        remoteStreamsRef.current.set(camKey, camStream);
                     }
 
-                    // Für Video-Tracks: Unterscheide anhand des Labels (Kamera vs. Screen)
-                    // Für Audio-Tracks: Ersetze alte Audio-Tracks (nur ein Audio-Track pro User)
+                    let screenStream = remoteStreamsRef.current.get(screenKey);
+                    if (!screenStream) {
+                        screenStream = new MediaStream();
+                        remoteStreamsRef.current.set(screenKey, screenStream);
+                    }
+
                     if (track.kind === "video") {
-                        const trackLabel = track.label.toLowerCase();
-                        const isScreenTrack = trackLabel.includes('screen') || trackLabel.includes('display') || trackLabel.includes('window') || trackLabel.includes('monitor');
-                        
-                        // Entferne nur Tracks vom gleichen Typ (Kamera oder Screen)
-                        const existing = managedStream.getVideoTracks().filter((t) => {
-                            const existingLabel = t.label.toLowerCase();
-                            const existingIsScreen = existingLabel.includes('screen') || existingLabel.includes('display') || existingLabel.includes('window') || existingLabel.includes('monitor');
-                            return isScreenTrack === existingIsScreen;
-                        });
-                        
-                        for (const existingTrack of existing) {
-                            managedStream.removeTrack(existingTrack);
-                            try {
-                                existingTrack.stop();
-                            } catch {
-                                /* ignore */
-                            }
+                        const kind = classifyVideoTrack(track);
+
+                        const target = kind === "screen" ? screenStream : camStream;
+
+                        // ersetze nur Video im jeweiligen Stream
+                        for (const t of target.getVideoTracks()) {
+                            target.removeTrack(t);
+                            try { t.stop(); } catch {}
                         }
-                    } else {
-                        // Audio: Ersetze alle Audio-Tracks (nur ein Audio-Stream pro User)
-                        const existing = managedStream.getTracks().filter((t) => t.kind === track.kind);
-                        for (const existingTrack of existing) {
-                            managedStream.removeTrack(existingTrack);
-                            try {
-                                existingTrack.stop();
-                            } catch {
-                                /* ignore */
-                            }
-                        }
+
+                        target.addTrack(track);
+
+                        // UI-Streams updaten (getrennte Keys!)
+                        setRemoteStreams((prev) => ({
+                            ...prev,
+                            [kind === "screen" ? screenKey : camKey]: new MediaStream(target.getTracks()),
+                        }));
+
+                        return;
                     }
 
-                    managedStream.addTrack(track);
-
-                    const uiStream = new MediaStream(managedStream.getTracks());
-                    setRemoteStreams((prev) => ({
-                        ...prev,
-                        [fromUserId]: uiStream,
-                    }));
-
-                    // Mikrofon-Status tracken für Audio-Tracks
+                    // AUDIO: immer zur Kamera dazupacken (damit Screen nicht “Audio-only” wird)
                     if (track.kind === "audio") {
+                        for (const t of camStream.getAudioTracks()) {
+                            camStream.removeTrack(t);
+                            try { t.stop(); } catch {}
+                        }
+
+                        camStream.addTrack(track);
+
+                        setRemoteStreams((prev) => ({
+                            ...prev,
+                            [camKey]: new MediaStream(camStream.getTracks()),
+                        }));
+
+                        // Mikrofon-Status tracken
                         const updateMuteStatus = () => {
                             setAudioMuteStatus((prev) => ({
                                 ...prev,
@@ -499,36 +532,42 @@ export function useWebRTC(params: {
             if (msg.type === "sfu:producer-closed") {
                 const m = msg as SfuProducerClosedMsg;
 
-                const managedStream = remoteStreamsRef.current.get(m.userId);
-                if (managedStream) {
-                    const toRemove = managedStream
-                        .getTracks()
-                        .filter((track) => (m.kind ? track.kind === m.kind : true));
-                    for (const track of toRemove) {
-                        managedStream.removeTrack(track);
-                        try {
-                            track.stop();
-                        } catch {
-                            /* ignore */
-                        }
-                    }
+                const camKey = `${m.userId}:camera`;
+                const screenKey = `${m.userId}:screen`;
 
-                    if (managedStream.getTracks().length === 0) {
-                        remoteStreamsRef.current.delete(m.userId);
+                const camStream = remoteStreamsRef.current.get(camKey);
+                const screenStream = remoteStreamsRef.current.get(screenKey);
+
+                const cleanupKind = (stream: MediaStream, kind?: mediasoupClient.types.MediaKind) => {
+                    const toRemove = stream.getTracks().filter((t) => (kind ? t.kind === kind : true));
+                    for (const t of toRemove) {
+                        stream.removeTrack(t);
+                        try { t.stop(); } catch {}
+                    }
+                };
+
+                if (camStream) cleanupKind(camStream, m.kind);
+                if (screenStream) cleanupKind(screenStream, m.kind);
+
+                const updateUiForKey = (key: string, stream: MediaStream | undefined) => {
+                    if (!stream || stream.getTracks().length === 0) {
+                        remoteStreamsRef.current.delete(key);
                         setRemoteStreams((prev) => {
-                            if (!prev[m.userId]) return prev;
+                            if (!prev[key]) return prev;
                             const next = { ...prev };
-                            delete next[m.userId];
+                            delete next[key];
                             return next;
                         });
                     } else {
-                        const uiStream = new MediaStream(managedStream.getTracks());
                         setRemoteStreams((prev) => ({
                             ...prev,
-                            [m.userId]: uiStream,
+                            [key]: new MediaStream(stream.getTracks()),
                         }));
                     }
-                }
+                };
+
+                updateUiForKey(camKey, camStream);
+                updateUiForKey(screenKey, screenStream);
 
                 consumedRef.current.delete(m.producerId);
                 return;
@@ -537,27 +576,28 @@ export function useWebRTC(params: {
             if (msg.type === "sfu:peer-left") {
                 const m = msg as SfuPeerLeftMsg;
 
-                const stream = remoteStreamsRef.current.get(m.userId);
-                if (stream) {
-                    stream.getTracks().forEach((track) => {
-                        try {
-                            track.stop();
-                        } catch {
-                            /* ignore */
-                        }
+                const camKey = `${m.userId}:camera`;
+                const screenKey = `${m.userId}:screen`;
+
+                for (const key of [camKey, screenKey]) {
+                    const stream = remoteStreamsRef.current.get(key);
+                    if (stream) {
+                        stream.getTracks().forEach((t) => {
+                            try { t.stop(); } catch {}
+                        });
+                        remoteStreamsRef.current.delete(key);
+                    }
+
+                    setRemoteStreams((prev) => {
+                        if (!prev[key]) return prev;
+                        const next = { ...prev };
+                        delete next[key];
+                        return next;
                     });
-                    remoteStreamsRef.current.delete(m.userId);
                 }
                 
                 // Mikrofon-Status entfernen
                 setAudioMuteStatus((prev) => {
-                    const next = { ...prev };
-                    delete next[m.userId];
-                    return next;
-                });
-
-                setRemoteStreams((prev) => {
-                    if (!prev[m.userId]) return prev;
                     const next = { ...prev };
                     delete next[m.userId];
                     return next;
@@ -637,7 +677,7 @@ export function useWebRTC(params: {
                 stopScreenShare();
             };
 
-            const producer = await sendTransport.produce({
+            screenProducerRef.current = await sendTransport.produce({
                 track,
                 encodings: [{
                     maxBitrate: 15_000_000,
@@ -648,10 +688,8 @@ export function useWebRTC(params: {
                     videoGoogleMaxBitrate: 15000,
                     videoGoogleMinBitrate: 4000,
                 },
-                appData: { mediaTag: "screen", source: "screen" },
+                appData: {mediaTag: "screen", source: "screen"},
             });
-
-            screenProducerRef.current = producer;
             setIsScreenSharing(true);
         } catch (e) {
             console.error("startScreenShare failed:", e);
