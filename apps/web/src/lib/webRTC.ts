@@ -238,28 +238,27 @@ export function useWebRTC(params: {
 
         const prods: Producer[] = [];
 
-        const produceSlot = async (slot: string, v: MediaStreamTrack, a: MediaStreamTrack) => {
-            // WICHTIG: Warte kurz zwischen den Slots, damit der Server sie nacheinander ins SDP schreibt
-            await new Promise(r => setTimeout(r, 200));
-
+        const produceSlot = async (
+            slot: "screen" | "presenter" | "questioner" | "organizer",
+            v: MediaStreamTrack,
+            a: MediaStreamTrack
+        ) => {
             prods.push(await sendTransport.produce({
                 track: v,
-                encodings: [{ maxBitrate: 100_000, maxFramerate: 5 }], // Geringe Last für Dummies
-                appData: { hlsOnly: true, hlsSlot: slot }
+                encodings: [{ maxBitrate: 80_000, maxFramerate: 5 }],
+                appData: { hlsOnly: true, hlsSlot: slot, source: "dummy" },
             }));
-
-            await new Promise(r => setTimeout(r, 100));
-
             prods.push(await sendTransport.produce({
                 track: a,
-                appData: { hlsOnly: true, hlsSlot: slot }
+                appData: { hlsOnly: true, hlsSlot: slot, source: "dummy" },
             }));
         };
 
-        await produceSlot("screen", screen.track, audio.track.clone());      // Index 0
-        await produceSlot("presenter", tile.track.clone(), audio.track.clone());  // Index 1
-        await produceSlot("questioner", tile.track.clone(), audio.track.clone()); // Index 2
-        await produceSlot("organizer", tile.track.clone(), audio.track.clone());  // Index 3
+        // Mehrere Producer brauchen eigene Tracks → clone()
+        await produceSlot("screen", screen.track, audio.track.clone());
+        await produceSlot("presenter", tile.track.clone(), audio.track.clone());
+        await produceSlot("questioner", tile.track.clone(), audio.track.clone());
+        await produceSlot("organizer", tile.track.clone(), audio.track.clone());
 
         hlsDummyRef.current = {
             stop: () => {
