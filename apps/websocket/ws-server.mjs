@@ -1001,10 +1001,8 @@ wss.on("connection", (ws) => {
         if (msg.type === "QuestionerActivated") {
             questionerByConf.set(msg.conferenceId, msg.userId);
             
-            // Falls der Peer schon in rtcRooms existiert: role updaten
-            const room = rtcRooms.get(msg.conferenceId);
-            const peer = room?.peers.get(msg.userId);
-            if (peer) peer.role = "QUESTIONER";
+            // NOTE: Peer-Rollen (ORGANIZER/PARTICIPANT) NICHT überschreiben.
+            // "Questioner" ist ein separater Status, der über questionerByConf abgebildet wird.
             
             // HLS-Bindings neu setzen (debounced)
             scheduleRefresh(msg.conferenceId);
@@ -1023,10 +1021,8 @@ wss.on("connection", (ws) => {
         if (msg.type === "QuestionerDeactivated") {
             questionerByConf.delete(msg.conferenceId);
             
-            // Falls der Peer schon in rtcRooms existiert: role zurück auf PARTICIPANT
-            const room = rtcRooms.get(msg.conferenceId);
-            const peer = room?.peers.get(msg.userId);
-            if (peer && peer.role === "QUESTIONER") peer.role = "PARTICIPANT";
+            // NOTE: Peer-Rollen (ORGANIZER/PARTICIPANT) NICHT anfassen.
+            // Der "Questioner" Status ist rein über questionerByConf definiert.
             
             // HLS-Bindings neu setzen (debounced)
             scheduleRefresh(msg.conferenceId);
@@ -1213,7 +1209,9 @@ wss.on("connection", (ws) => {
                 }
 
 
-                if (peer?.role === "QUESTIONER") {
+                // Questioner-Status ist separat von peer.role (ORGANIZER/PARTICIPANT)
+                const questionerId = questionerByConf.get(conferenceId);
+                if (questionerId && userId === questionerId) {
                     // Questioners können generell kein Screen-Sharing starten (wird oben bereits abgefangen)
                     // Diese Prüfung bleibt als Fallback
                     if (appData?.mediaTag === "screen" || appData?.source === "screen") {
