@@ -86,25 +86,24 @@ start_ffmpeg() {
 
   local -a cmd
   cmd=(
-    ffmpeg
-    -hide_banner -loglevel info -stats
+      ffmpeg
+      -hide_banner -loglevel info -stats
+      -protocol_whitelist file,udp,rtp
 
-    -protocol_whitelist file,udp,rtp
+      # Add these lines to strengthen the RTP receiver
+      -reorder_queue_size 4096
+      -buffer_size 20M
+      -fifo_size 1000000
 
-    # Input-Puffer/Queue: hilft bei CPU-Spikes (Screenshare-Start)
-    -thread_queue_size 8192
-    -reorder_queue_size 1024
-    -rtbufsize 500M
+      -thread_queue_size 16384     # Increased from 8192
+      -rtbufsize 1G                # Increased from 500M
 
-    # Ihr wollt Delay -> gebt FFmpeg Delay
-    -max_delay 30000000
-
-    # RTP robust / weniger Stau
-    -fflags +genpts+discardcorrupt+nobuffer
-    -analyzeduration 1M -probesize 1M
-
-    -i "$SDP"
-  )
+      # Keep your existing max_delay
+      -max_delay 30000000
+      -fflags +genpts+discardcorrupt+nobuffer
+      -analyzeduration 1M -probesize 1M
+      -i "$SDP"
+    )
 
   add_variant() {
     local prefix="$1" v_idx="$2" a_idx="$3"
