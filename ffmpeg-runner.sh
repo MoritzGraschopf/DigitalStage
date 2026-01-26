@@ -23,11 +23,16 @@ mkdir -p "$HLS"
 
 log() { echo "[ffmpeg-runner] $*"; }
 
+mtime() {
+  # Linux: stat -c %Y, macOS/BSD: stat -f %m
+  stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0
+}
+
 active_is_stale() {
   [ ! -f "$ACTIVE" ] && return 0
   local now ts age
   now=$(date +%s)
-  ts=$(stat -c %Y "$ACTIVE" 2>/dev/null || echo 0)
+  ts="$(mtime "$ACTIVE")"
   age=$(( now - ts ))
   [ "$age" -gt "$ACTIVE_STALE_SEC" ]
 }
@@ -169,6 +174,7 @@ while true; do
 
   PID="$(start_ffmpeg)" || { sleep 1; continue; }
   STARTED_AT="$(date +%s)"
+  SDP_MTIME="$(mtime "$SDP")"
   log "ffmpeg pid=$PID (outputs: ${PREFIXES_TO_CHECK[*]})"
 
   while kill -0 "$PID" 2>/dev/null; do
@@ -176,6 +182,13 @@ while true; do
       log "conference inactive -> stopping ffmpeg"
       kill_ffmpeg "$PID"
       rm -f "$SESSION_FLAG" 2>/dev/null || true
+      break
+    fi
+
+    new_mtime="$(mtime "$SDP")"
+    if [ "$new_mtime" != "$SDP_MTIME" ]; then
+      log "SDP changed -> restarting ffmpeg to pick up new streams"
+      kill_ffmpeg "$PID"
       break
     fi
 
