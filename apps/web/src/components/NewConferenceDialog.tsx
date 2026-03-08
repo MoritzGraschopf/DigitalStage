@@ -1,6 +1,6 @@
 "use client"
 
-import React, {useEffect} from "react";
+import React from "react";
 import {z} from "zod";
 import {useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
@@ -12,12 +12,6 @@ import {Form, FormControl, FormDescription, FormField, FormItem, FormLabel, Form
 import {Input} from "@/components/ui/input";
 import {Textarea} from "@/components/ui/textarea";
 import {Button} from "@/components/ui/button";
-import {
-    Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
-} from "@/components/ui/command";
-import {Checkbox} from "@/components/ui/checkbox";
-import {User} from "@prisma/client";
-import {Badge} from "@/components/ui/badge";
 import {useAuth} from "@/context/AuthContext";
 import {useWS} from "@/context/WebSocketContext";
 
@@ -32,7 +26,6 @@ const conferenceScheme = z.object({
     description: z.string().max(120, {error: "Die Beschreibung darf höchstens 120 Zeichen enthalten."}).trim().optional(),
     startAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
     endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
-    presenterUserId: z.string().optional(),
 }).refine((d) => {
     const s = new Date(d.startAt);
     const e = new Date(d.endDate);
@@ -45,26 +38,11 @@ interface NewConferenceSheetProps {
 }
 
 const NewConferenceSheet: React.FC<NewConferenceSheetProps> = ({open, setOpen}) => {
-    const { token, user } = useAuth();
+    const { token } = useAuth();
     const now = new Date();
     const inOneHour = new Date(now.getTime() + 60 * 60 * 1000);
 
-    const [users, setUsers] = React.useState<User[]>([]);
-
     const ws = useWS()
-
-    useEffect(() => {
-        const fetchUsers = async () => {
-            try {
-                const res = await fetch("/api/user");
-                const data = await res.json();
-                setUsers(data as User[]);
-            } catch (error) {
-                console.error("Error fetching users:", error);
-            }
-        };
-        fetchUsers();
-    }, []);
 
     const form = useForm<z.infer<typeof conferenceScheme>>({
         resolver: zodResolver(conferenceScheme),
@@ -73,11 +51,8 @@ const NewConferenceSheet: React.FC<NewConferenceSheetProps> = ({open, setOpen}) 
             description: "",
             startAt: toYYYYMMDDTHHMM(now),
             endDate: toYYYYMMDDTHHMM(inOneHour),
-            presenterUserId: undefined,
         },
     });
-
-    const presenterUserId = form.watch("presenterUserId");
 
     async function onSubmit(values: z.infer<typeof conferenceScheme>) {
         try {
@@ -92,7 +67,6 @@ const NewConferenceSheet: React.FC<NewConferenceSheetProps> = ({open, setOpen}) 
                     description: values.description,
                     startAt: values.startAt,
                     endDate: values.endDate,
-                    presenterUserId: values.presenterUserId,
                 }),
             });
 
@@ -106,7 +80,6 @@ const NewConferenceSheet: React.FC<NewConferenceSheetProps> = ({open, setOpen}) 
                 description: "",
                 startAt: toYYYYMMDDTHHMM(new Date()),
                 endDate: toYYYYMMDDTHHMM(new Date(Date.now() + 60 * 60 * 1000)),
-                presenterUserId: undefined,
             });
             setOpen(false);
 
@@ -219,76 +192,6 @@ const NewConferenceSheet: React.FC<NewConferenceSheetProps> = ({open, setOpen}) 
                                             />
                                         </FormControl>
                                         <FormMessage/>
-                                    </FormItem>
-                                )}
-                            />
-
-                            <FormField
-                                control={form.control}
-                                name="presenterUserId"
-                                render={() => (
-                                    <FormItem>
-                                        <FormLabel>Präsentator (optional)</FormLabel>
-                                        <FormDescription>
-                                            Wähle einen Präsentator aus. Du kannst dies auch später in der Konferenz ändern.
-                                        </FormDescription>
-
-                                        {presenterUserId && (
-                                            <div className="mt-2">
-                                                {(() => {
-                                                    const presenter = users.find(u => u.id === presenterUserId);
-                                                    return presenter ? (
-                                                        <Badge
-                                                            variant="default"
-                                                            className="cursor-pointer"
-                                                            onClick={() => form.setValue("presenterUserId", undefined)}
-                                                        >
-                                                            {presenter.firstName} {presenter.lastName ?? ""} (Präsentator)
-                                                        </Badge>
-                                                    ) : null;
-                                                })()}
-                                            </div>
-                                        )}
-
-                                        <FormControl>
-                                            <Command className="rounded-md border">
-                                                <CommandInput placeholder="Präsentator suchen..." />
-                                                <CommandList>
-                                                    <CommandEmpty>Keine User gefunden.</CommandEmpty>
-                                                    <CommandGroup heading="Als Präsentator auswählen">
-                                                        {/* Organizer kann nicht als Präsentator ausgewählt werden */}
-                                                        {/* Alle anderen User */}
-                                                        {users
-                                                            .filter((u) => user ? u.id !== user.id : true)
-                                                            .map((u) => (
-                                                                <CommandItem
-                                                                    key={u.id}
-                                                                    onSelect={() => {
-                                                                        const newValue = presenterUserId === u.id ? undefined : u.id;
-                                                                        form.setValue("presenterUserId", newValue);
-                                                                    }}
-                                                                    className="flex items-center gap-2"
-                                                                >
-                                                                    <div onClick={(e) => e.stopPropagation()}>
-                                                                        <Checkbox
-                                                                            checked={presenterUserId === u.id}
-                                                                            onCheckedChange={() => {
-                                                                                const newValue = presenterUserId === u.id ? undefined : u.id;
-                                                                                form.setValue("presenterUserId", newValue);
-                                                                            }}
-                                                                        />
-                                                                    </div>
-                                                                    <span className="truncate">
-                                                                        {u.firstName} {u.lastName ?? ""}
-                                                                    </span>
-                                                                </CommandItem>
-                                                            ))}
-                                                    </CommandGroup>
-                                                </CommandList>
-                                            </Command>
-                                        </FormControl>
-
-                                        <FormMessage />
                                     </FormItem>
                                 )}
                             />
